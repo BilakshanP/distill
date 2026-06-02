@@ -304,6 +304,12 @@ pub async fn mark_stale(
 #[derive(Deserialize, ToSchema)]
 pub struct DigDeeperRequest {
     pub prompt: String,
+    #[serde(default = "default_true")]
+    pub include_comments: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Serialize, ToSchema)]
@@ -354,20 +360,24 @@ pub async fn dig_deeper(
                 StatusCode::INTERNAL_SERVER_ERROR
             })?;
 
-    // Gather comments for context
-    let comments = sqlx::query_as::<_, (String,)>(
-        "SELECT body FROM comments WHERE answer_id = $1 ORDER BY created_at ASC LIMIT 20",
-    )
-    .bind(answer_id)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
+    // Gather comments for context (optional)
+    let comments_ctx = if req.include_comments {
+        let comments = sqlx::query_as::<_, (String,)>(
+            "SELECT body FROM comments WHERE answer_id = $1 ORDER BY created_at ASC LIMIT 20",
+        )
+        .bind(answer_id)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default();
 
-    let comments_ctx = if comments.is_empty() {
-        String::new()
+        if comments.is_empty() {
+            String::new()
+        } else {
+            let c: Vec<_> = comments.iter().map(|r| r.0.as_str()).collect();
+            format!("\n\nComments/discussion:\n{}", c.join("\n---\n"))
+        }
     } else {
-        let c: Vec<_> = comments.iter().map(|r| r.0.as_str()).collect();
-        format!("\n\nComments/discussion:\n{}", c.join("\n---\n"))
+        String::new()
     };
 
     use genai::chat::{ChatMessage, ChatRequest};
