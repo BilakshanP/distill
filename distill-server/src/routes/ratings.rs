@@ -61,6 +61,26 @@ pub async fn create_rating(
     })))
 }
 
+pub async fn redact_rating(
+    State(state): State<AppState>,
+    Path(answer_id): Path<Uuid>,
+    auth: AuthUser,
+) -> Result<StatusCode, StatusCode> {
+    let result = sqlx::query(
+        "UPDATE ratings SET rater_original_query = NULL, comment = NULL WHERE answer_id = $1 AND rater_id = $2"
+    )
+    .bind(answer_id)
+    .bind(auth.user_id)
+    .execute(&state.db)
+    .await
+    .map_err(|e| { tracing::error!("redact rating failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+
+    if result.rows_affected() == 0 {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn get_ratings(
     State(state): State<AppState>,
     Path(answer_id): Path<Uuid>,

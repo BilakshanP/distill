@@ -50,12 +50,40 @@ async fn me(
     })))
 }
 
+async fn delete_me(
+    State(state): State<AppState>,
+    auth: AuthUser,
+) -> Result<StatusCode, StatusCode> {
+    // Anonymize ratings (null out PII fields)
+    sqlx::query("UPDATE ratings SET rater_original_query = NULL, comment = NULL WHERE rater_id = $1")
+        .bind(auth.user_id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Anonymize contradiction flags
+    sqlx::query("UPDATE contradiction_flags SET flagged_by = NULL WHERE flagged_by = $1")
+        .bind(auth.user_id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Anonymize user record (keep for FK integrity)
+    sqlx::query("UPDATE users SET display_name = 'Deleted User', email = NULL, avatar_url = NULL, provider_id = '' WHERE id = $1")
+        .bind(auth.user_id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/auth/github", get(auth::oauth::github_login))
         .route("/auth/github/callback", get(auth::oauth::github_callback))
-        .route("/me", get(me))
+        .route("/me", get(me).delete(delete_me))
         .route("/questions", axum::routing::post(routes::questions::create_question))
         .route("/questions/search", get(routes::questions::search_questions))
         .route("/questions/preview", axum::routing::post(routes::questions::preview_question))
@@ -67,6 +95,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/answers/{id}/deep-dives", get(routes::answers::get_deep_dives))
         .route("/answers/{id}/mark-stale", axum::routing::post(routes::answers::mark_stale))
         .route("/answers/{id}/ratings", axum::routing::post(routes::ratings::create_rating).get(routes::ratings::get_ratings))
+        .route("/answers/{id}/ratings/redact", axum::routing::put(routes::ratings::redact_rating))
         .route("/answers/{id}/flag-contradiction", axum::routing::post(routes::contradictions::flag_contradiction))
         .route("/answers/{id}/contradictions", get(routes::contradictions::get_contradictions_for_answer))
         .route("/admin/contradictions", get(routes::contradictions::admin_review_queue))
