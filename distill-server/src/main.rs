@@ -79,8 +79,12 @@ async fn main() {
         github_client_id: cfg.github_client_id,
         github_client_secret: cfg.github_client_secret,
         base_url: cfg.base_url,
-        llm_api_key: cfg.llm_api_key,
+        llm_api_key: cfg.llm_api_key.clone(),
     };
+
+    if cfg.llm_api_key.is_none() {
+        tracing::warn!("⚠️  LLM_API_KEY not set — AI features disabled (embeddings, rephrase, contradiction detection, dig deeper)");
+    }
 
     let app = Router::new()
         .route("/health", get(health))
