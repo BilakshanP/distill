@@ -2,9 +2,11 @@ mod config;
 
 use axum::{extract::State, http::StatusCode, routing::get, Json, Router};
 use sqlx::postgres::PgPoolOptions;
-use sqlx::PgPool;
+use sqlx::{migrate::Migrator, PgPool};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
+
+static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 
 #[derive(Clone)]
 struct AppState {
@@ -34,6 +36,11 @@ async fn main() {
         .connect(&cfg.database_url)
         .await
         .expect("Failed to connect to database");
+
+    if cfg.auto_migrate {
+        tracing::info!("running migrations");
+        MIGRATOR.run(&db).await.expect("Failed to run migrations");
+    }
 
     let state = AppState { db };
 

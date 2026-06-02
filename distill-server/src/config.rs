@@ -4,6 +4,7 @@ pub struct Config {
     pub database_url: String,
     pub host: String,
     pub port: u16,
+    pub auto_migrate: bool,
 }
 
 impl Config {
@@ -15,6 +16,10 @@ impl Config {
                 .unwrap_or_else(|_| "3000".into())
                 .parse()
                 .expect("PORT must be a number"),
+            auto_migrate: env::var("AUTO_MIGRATE")
+                .unwrap_or_else(|_| "false".into())
+                .parse()
+                .unwrap_or(false),
         }
     }
 }
