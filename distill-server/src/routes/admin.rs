@@ -6,7 +6,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::{auth::middleware::AuthUser, AppState};
+use crate::{auth::middleware::AdminUser, AppState};
 
 #[derive(Serialize)]
 pub struct ConfigResponse {
@@ -20,7 +20,7 @@ pub struct UpdateConfigRequest {
 
 pub async fn get_config(
     State(state): State<AppState>,
-    _auth: AuthUser,
+    _auth: AdminUser,
 ) -> Result<Json<ConfigResponse>, StatusCode> {
     let rows = sqlx::query_as::<_, (String, String)>(
         "SELECT key, value FROM config"
@@ -35,7 +35,7 @@ pub async fn get_config(
 
 pub async fn update_config(
     State(state): State<AppState>,
-    _auth: AuthUser,
+    _auth: AdminUser,
     Json(req): Json<UpdateConfigRequest>,
 ) -> Result<Json<ConfigResponse>, StatusCode> {
     for (key, value) in &req.config {

@@ -73,7 +73,7 @@ pub async fn get_contradictions_for_answer(
 
 pub async fn admin_review_queue(
     State(state): State<AppState>,
-    _auth: AuthUser,
+    _auth: crate::auth::middleware::AdminUser,
 ) -> Result<Json<Vec<ContradictionResponse>>, StatusCode> {
     let rows = sqlx::query_as::<_, (Uuid, Uuid, Uuid, String, String, Option<Uuid>, String, chrono::DateTime<chrono::Utc>)>(
         r#"SELECT id, answer_id_a, answer_id_b, explanation, source, flagged_by, status, detected_at

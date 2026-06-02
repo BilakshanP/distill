@@ -55,6 +55,22 @@ async fn create_test_user() -> (Uuid, String) {
     (user_id, token)
 }
 
+async fn create_admin_user() -> (Uuid, String) {
+    let db = get_db().await;
+    let user_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO users (id, provider, provider_id, display_name, role) VALUES ($1, 'test', $2, 'Admin User', 'admin')"
+    )
+    .bind(user_id)
+    .bind(user_id.to_string())
+    .execute(&db)
+    .await
+    .unwrap();
+
+    let token = jwt::create_token(user_id, "test-secret").unwrap();
+    (user_id, token)
+}
+
 #[tokio::test]
 async fn test_health() {
     let server = setup().await;
@@ -197,8 +213,10 @@ async fn test_contradiction_flag() {
         .await;
     resp.assert_status(axum::http::StatusCode::CREATED);
 
+    // Admin queue requires admin role
+    let (_admin_uid, admin_token) = create_admin_user().await;
     let resp = server.get("/admin/contradictions")
-        .authorization_bearer(&token)
+        .authorization_bearer(&admin_token)
         .await;
     resp.assert_status_ok();
 }
@@ -215,7 +233,7 @@ async fn test_graph() {
 #[tokio::test]
 async fn test_admin_config() {
     let server = setup().await;
-    let (_uid, token) = create_test_user().await;
+    let (_uid, token) = create_admin_user().await;
 
     let resp = server.get("/admin/config")
         .authorization_bearer(&token)
