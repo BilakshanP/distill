@@ -5,12 +5,14 @@ pub mod routes;
 use axum::{extract::State, http::StatusCode, routing::get, Json, Router};
 use sqlx::PgPool;
 use tower_http::trace::TraceLayer;
+#[cfg(debug_assertions)]
 use utoipa::OpenApi;
-#[cfg(feature = "swagger")]
+#[cfg(debug_assertions)]
 use utoipa_swagger_ui::SwaggerUi;
 
 use auth::middleware::AuthUser;
 
+#[cfg(debug_assertions)]
 #[derive(OpenApi)]
 #[openapi(
     paths(
@@ -192,7 +194,7 @@ pub fn build_router(state: AppState) -> Router {
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
-    #[cfg(feature = "swagger")]
+    #[cfg(debug_assertions)]
     let app =
         app.merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()));
 

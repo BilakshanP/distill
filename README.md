@@ -59,10 +59,16 @@ cargo test -p distill-server
 ### Swagger UI
 
 ```bash
-cargo run -p distill-server --features swagger
+cargo run -p distill-server
 ```
 
 Visit `http://localhost:3000/swagger-ui` for interactive API documentation.
+
+Swagger UI is automatically available in debug builds and stripped from release builds.
+
+```bash
+cargo run -p distill-server --release  # No swagger, smaller binary
+```
 
 ## API Endpoints
 
