@@ -196,5 +196,18 @@ async fn do_generate_ai_answer(
     .await?;
 
     tracing::info!("AI answer generated for question {}", question_id);
+
+    // Trigger contradiction detection
+    let answer_row = sqlx::query_as::<_, (Uuid,)>(
+        "SELECT id FROM answers WHERE question_id = $1 AND author_type = 'ai' ORDER BY created_at DESC LIMIT 1"
+    )
+    .bind(question_id)
+    .fetch_optional(db)
+    .await?;
+
+    if let Some((answer_id,)) = answer_row {
+        crate::routes::contradictions::detect_contradictions(db, chat_model, answer_id, &answer_text, question_id).await;
+    }
+
     Ok(())
 }
