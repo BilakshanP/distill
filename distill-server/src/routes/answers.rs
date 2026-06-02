@@ -3,10 +3,10 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::AppState;
+use crate::{auth::middleware::AuthUser, AppState};
 
 #[derive(Serialize)]
 pub struct AnswerResponse {
@@ -17,6 +17,85 @@ pub struct AnswerResponse {
     pub body: String,
     pub is_stale: bool,
     pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Deserialize)]
+pub struct EditAnswerRequest {
+    pub body: String,
+    pub edit_message: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct EditHistoryEntry {
+    pub id: Uuid,
+    pub editor_id: Uuid,
+    pub diff: String,
+    pub edit_message: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub async fn edit_answer(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    auth: AuthUser,
+    Json(req): Json<EditAnswerRequest>,
+) -> Result<Json<AnswerResponse>, StatusCode> {
+    // Get current body
+    let old_body: (String,) = sqlx::query_as("SELECT body FROM answers WHERE id = $1")
+        .bind(id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| { tracing::error!("edit fetch failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    // Compute diff
+    let patch = diffy_imara::create_patch(&old_body.0, &req.body);
+    let diff_text = patch.to_string();
+
+    // Store diff
+    sqlx::query(
+        "INSERT INTO answer_edits (answer_id, editor_id, diff, edit_message) VALUES ($1, $2, $3, $4)"
+    )
+    .bind(id)
+    .bind(auth.user_id)
+    .bind(&diff_text)
+    .bind(&req.edit_message)
+    .execute(&state.db)
+    .await
+    .map_err(|e| { tracing::error!("edit insert failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+
+    // Update answer body
+    let row = sqlx::query_as::<_, (Uuid, Uuid, Option<Uuid>, String, String, bool, chrono::DateTime<chrono::Utc>)>(
+        r#"UPDATE answers SET body = $1, updated_at = now() WHERE id = $2
+           RETURNING id, question_id, author_id, author_type, body, is_stale, created_at"#,
+    )
+    .bind(&req.body)
+    .bind(id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| { tracing::error!("edit update failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+
+    Ok(Json(AnswerResponse {
+        id: row.0, question_id: row.1, author_id: row.2, author_type: row.3,
+        body: row.4, is_stale: row.5, created_at: row.6,
+    }))
+}
+
+pub async fn get_history(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Vec<EditHistoryEntry>>, StatusCode> {
+    let rows = sqlx::query_as::<_, (Uuid, Uuid, String, Option<String>, chrono::DateTime<chrono::Utc>)>(
+        "SELECT id, editor_id, diff, edit_message, created_at FROM answer_edits WHERE answer_id = $1 ORDER BY created_at ASC"
+    )
+    .bind(id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| { tracing::error!("history fetch failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+
+    Ok(Json(rows.into_iter().map(|r| EditHistoryEntry {
+        id: r.0, editor_id: r.1, diff: r.2, edit_message: r.3, created_at: r.4,
+    }).collect()))
 }
 
 pub async fn get_answers(

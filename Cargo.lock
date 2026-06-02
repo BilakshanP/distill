@@ -486,6 +486,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "diffy-imara"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4429f9205ee235ccaac635400e19507240477be615c4631e3f18a0690881d6db"
+dependencies = [
+ "imara-diff",
+ "nu-ansi-term",
+]
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -525,6 +535,7 @@ dependencies = [
  "axum",
  "axum-extra",
  "chrono",
+ "diffy-imara",
  "dotenvy",
  "genai",
  "jsonwebtoken",
@@ -1251,6 +1262,15 @@ checksum = "cb68373c0d6620ef8105e855e7745e18b0d00d3bdb07fb532e434244cdb9a714"
 dependencies = [
  "icu_normalizer",
  "icu_properties",
+]
+
+[[package]]
+name = "imara-diff"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "17d34b7d42178945f775e84bc4c36dde7c1c6cdfea656d3354d009056f2bb3d2"
+dependencies = [
+ "hashbrown 0.15.5",
 ]
 
 [[package]]
