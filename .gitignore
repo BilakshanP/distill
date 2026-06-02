@@ -1,2 +1,20 @@
+# Build
 /target
+**/target
+
+# Environment
 .env
+
+# IDE
+.idea/
+.vscode/
+.zed/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+pgdata/
