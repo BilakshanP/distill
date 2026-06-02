@@ -15,5 +15,4 @@ CREATE TABLE questions (
 );
 
 CREATE INDEX questions_tsv_idx ON questions USING gin(tsv);
-CREATE INDEX questions_embedding_idx ON questions USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX questions_tenant_idx ON questions(tenant_id);

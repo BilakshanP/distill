@@ -14,4 +14,3 @@ CREATE TABLE answers (
 );
 
 CREATE INDEX answers_question_idx ON answers(question_id);
-CREATE INDEX answers_embedding_idx ON answers USING hnsw (embedding vector_cosine_ops);
