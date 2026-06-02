@@ -1,7 +1,7 @@
 use axum_test::TestServer;
 use distill_server::{auth::jwt, build_router, AppState};
-use sqlx::postgres::PgPoolOptions;
 use sqlx::migrate::Migrator;
+use sqlx::postgres::PgPoolOptions;
 use uuid::Uuid;
 
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
@@ -89,9 +89,7 @@ async fn test_me_unauthorized() {
 async fn test_me_authorized() {
     let server = setup().await;
     let (_uid, token) = create_test_user().await;
-    let resp = server.get("/me")
-        .authorization_bearer(&token)
-        .await;
+    let resp = server.get("/me").authorization_bearer(&token).await;
     resp.assert_status_ok();
 }
 
@@ -100,7 +98,8 @@ async fn test_create_and_get_question() {
     let server = setup().await;
     let (_uid, token) = create_test_user().await;
 
-    let resp = server.post("/questions")
+    let resp = server
+        .post("/questions")
         .authorization_bearer(&token)
         .json(&serde_json::json!({"title": "Test Q", "body": "Test body", "tags": ["t"]}))
         .await;
@@ -151,7 +150,8 @@ async fn test_answers_and_edit() {
     assert_eq!(answers.len(), 1);
 
     // Edit
-    let resp = server.put(&format!("/answers/{}", a_id))
+    let resp = server
+        .put(&format!("/answers/{}", a_id))
         .authorization_bearer(&token)
         .json(&serde_json::json!({"body": "Edited", "edit_message": "fix"}))
         .await;
@@ -175,10 +175,17 @@ async fn test_ratings() {
         .bind(q_id).bind(uid).execute(&db).await.unwrap();
 
     let a_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO answers (id, question_id, author_type, body) VALUES ($1, $2, 'ai', 'ans')")
-        .bind(a_id).bind(q_id).execute(&db).await.unwrap();
+    sqlx::query(
+        "INSERT INTO answers (id, question_id, author_type, body) VALUES ($1, $2, 'ai', 'ans')",
+    )
+    .bind(a_id)
+    .bind(q_id)
+    .execute(&db)
+    .await
+    .unwrap();
 
-    let resp = server.post(&format!("/answers/{}/ratings", a_id))
+    let resp = server
+        .post(&format!("/answers/{}/ratings", a_id))
         .authorization_bearer(&token)
         .json(&serde_json::json!({"score": 5, "comment": "Great", "rater_original_query": "test"}))
         .await;
@@ -203,12 +210,25 @@ async fn test_contradiction_flag() {
 
     let a1 = Uuid::new_v4();
     let a2 = Uuid::new_v4();
-    sqlx::query("INSERT INTO answers (id, question_id, author_type, body) VALUES ($1, $2, 'human', 'yes')")
-        .bind(a1).bind(q_id).execute(&db).await.unwrap();
-    sqlx::query("INSERT INTO answers (id, question_id, author_type, body) VALUES ($1, $2, 'human', 'no')")
-        .bind(a2).bind(q_id).execute(&db).await.unwrap();
+    sqlx::query(
+        "INSERT INTO answers (id, question_id, author_type, body) VALUES ($1, $2, 'human', 'yes')",
+    )
+    .bind(a1)
+    .bind(q_id)
+    .execute(&db)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO answers (id, question_id, author_type, body) VALUES ($1, $2, 'human', 'no')",
+    )
+    .bind(a2)
+    .bind(q_id)
+    .execute(&db)
+    .await
+    .unwrap();
 
-    let resp = server.post(&format!("/answers/{}/flag-contradiction", a1))
+    let resp = server
+        .post(&format!("/answers/{}/flag-contradiction", a1))
         .authorization_bearer(&token)
         .json(&serde_json::json!({"contradicts_answer_id": a2, "explanation": "opposite"}))
         .await;
@@ -216,12 +236,17 @@ async fn test_contradiction_flag() {
 
     // Admin queue requires admin role
     let (_admin_uid, admin_token) = create_admin_user().await;
-    let resp = server.get("/admin/contradictions")
+    let resp = server
+        .get("/admin/contradictions")
         .authorization_bearer(&admin_token)
         .await;
     resp.assert_status_ok();
     let body: serde_json::Value = resp.json();
-    assert!(body["data"].as_array().unwrap().iter().any(|c| c["explanation"] == "opposite"));
+    assert!(body["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|c| c["explanation"] == "opposite"));
 }
 
 #[tokio::test]
@@ -238,12 +263,14 @@ async fn test_admin_config() {
     let server = setup().await;
     let (_uid, token) = create_admin_user().await;
 
-    let resp = server.get("/admin/config")
+    let resp = server
+        .get("/admin/config")
         .authorization_bearer(&token)
         .await;
     resp.assert_status_ok();
 
-    let resp = server.put("/admin/config")
+    let resp = server
+        .put("/admin/config")
         .authorization_bearer(&token)
         .json(&serde_json::json!({"config": {"rating_scale": "thumbs"}}))
         .await;

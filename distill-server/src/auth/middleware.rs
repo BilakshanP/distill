@@ -29,8 +29,8 @@ where
             .and_then(|v| v.strip_prefix("Bearer "))
             .ok_or(StatusCode::UNAUTHORIZED)?;
 
-        let claims =
-            jwt::validate_token(token, &app_state.jwt_secret).map_err(|_| StatusCode::UNAUTHORIZED)?;
+        let claims = jwt::validate_token(token, &app_state.jwt_secret)
+            .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
         Ok(AuthUser {
             user_id: claims.sub,
@@ -61,8 +61,8 @@ where
             .and_then(|v| v.strip_prefix("Bearer "))
             .ok_or(StatusCode::UNAUTHORIZED)?;
 
-        let claims =
-            jwt::validate_token(token, &app_state.jwt_secret).map_err(|_| StatusCode::UNAUTHORIZED)?;
+        let claims = jwt::validate_token(token, &app_state.jwt_secret)
+            .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
         // Check role
         let role: Option<(String,)> = sqlx::query_as("SELECT role FROM users WHERE id = $1")
@@ -72,7 +72,9 @@ where
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
         match role {
-            Some((r,)) if r == "admin" => Ok(AdminUser { user_id: claims.sub }),
+            Some((r,)) if r == "admin" => Ok(AdminUser {
+                user_id: claims.sub,
+            }),
             _ => Err(StatusCode::FORBIDDEN),
         }
     }

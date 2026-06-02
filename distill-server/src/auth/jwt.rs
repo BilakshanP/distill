@@ -14,7 +14,11 @@ pub fn create_token(user_id: Uuid, secret: &str) -> Result<String, jsonwebtoken:
         sub: user_id,
         exp: (Utc::now() + Duration::days(7)).timestamp(),
     };
-    encode(&Header::default(), &claims, &EncodingKey::from_secret(secret.as_bytes()))
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
 }
 
 pub fn validate_token(token: &str, secret: &str) -> Result<Claims, jsonwebtoken::errors::Error> {

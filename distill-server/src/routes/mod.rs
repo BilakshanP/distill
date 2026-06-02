@@ -6,9 +6,9 @@ pub mod llm_cache;
 pub mod questions;
 pub mod ratings;
 
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use std::collections::HashMap;
 
 pub async fn get_config_map(db: &PgPool) -> HashMap<String, String> {
     sqlx::query_as::<_, (String, String)>("SELECT key, value FROM config")
@@ -38,7 +38,10 @@ pub struct Paginated<T: Serialize> {
 }
 
 pub fn is_llm_feature_enabled(config: &HashMap<String, String>, feature_key: &str) -> bool {
-    let global = config.get("llm_features_enabled").map(|v| v == "true").unwrap_or(true);
+    let global = config
+        .get("llm_features_enabled")
+        .map(|v| v == "true")
+        .unwrap_or(true);
     if !global {
         return false;
     }
@@ -47,15 +50,24 @@ pub fn is_llm_feature_enabled(config: &HashMap<String, String>, feature_key: &st
 
 pub fn encode_cursor(created_at: &chrono::DateTime<chrono::Utc>, id: &uuid::Uuid) -> String {
     use base64::Engine;
-    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(format!("{},{}", created_at.to_rfc3339(), id))
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(format!(
+        "{},{}",
+        created_at.to_rfc3339(),
+        id
+    ))
 }
 
 pub fn decode_cursor(cursor: &str) -> Option<(chrono::DateTime<chrono::Utc>, uuid::Uuid)> {
     use base64::Engine;
-    let decoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(cursor).ok()?;
+    let decoded = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(cursor)
+        .ok()?;
     let s = String::from_utf8(decoded).ok()?;
     let mut parts = s.splitn(2, ',');
-    let ts = parts.next()?.parse::<chrono::DateTime<chrono::Utc>>().ok()?;
+    let ts = parts
+        .next()?
+        .parse::<chrono::DateTime<chrono::Utc>>()
+        .ok()?;
     let id = parts.next()?.parse::<uuid::Uuid>().ok()?;
     Some((ts, id))
 }

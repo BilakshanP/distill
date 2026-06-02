@@ -45,17 +45,38 @@ pub async fn flag_contradiction(
     .await
     .map_err(|e| { tracing::error!("flag contradiction failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
 
-    Ok((StatusCode::CREATED, Json(ContradictionResponse {
-        id: row.0, answer_id_a: row.1, answer_id_b: row.2, explanation: row.3,
-        source: row.4, flagged_by: row.5, status: row.6, detected_at: row.7,
-    })))
+    Ok((
+        StatusCode::CREATED,
+        Json(ContradictionResponse {
+            id: row.0,
+            answer_id_a: row.1,
+            answer_id_b: row.2,
+            explanation: row.3,
+            source: row.4,
+            flagged_by: row.5,
+            status: row.6,
+            detected_at: row.7,
+        }),
+    ))
 }
 
 pub async fn get_contradictions_for_answer(
     State(state): State<AppState>,
     Path(answer_id): Path<Uuid>,
 ) -> Result<Json<Vec<ContradictionResponse>>, StatusCode> {
-    let rows = sqlx::query_as::<_, (Uuid, Uuid, Uuid, String, String, Option<Uuid>, String, chrono::DateTime<chrono::Utc>)>(
+    let rows = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            Uuid,
+            Uuid,
+            String,
+            String,
+            Option<Uuid>,
+            String,
+            chrono::DateTime<chrono::Utc>,
+        ),
+    >(
         r#"SELECT id, answer_id_a, answer_id_b, explanation, source, flagged_by, status, detected_at
            FROM contradiction_flags WHERE answer_id_a = $1 OR answer_id_b = $1
            ORDER BY detected_at DESC"#,
@@ -63,12 +84,25 @@ pub async fn get_contradictions_for_answer(
     .bind(answer_id)
     .fetch_all(&state.db)
     .await
-    .map_err(|e| { tracing::error!("get contradictions failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+    .map_err(|e| {
+        tracing::error!("get contradictions failed: {:?}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
-    Ok(Json(rows.into_iter().map(|r| ContradictionResponse {
-        id: r.0, answer_id_a: r.1, answer_id_b: r.2, explanation: r.3,
-        source: r.4, flagged_by: r.5, status: r.6, detected_at: r.7,
-    }).collect()))
+    Ok(Json(
+        rows.into_iter()
+            .map(|r| ContradictionResponse {
+                id: r.0,
+                answer_id_a: r.1,
+                answer_id_b: r.2,
+                explanation: r.3,
+                source: r.4,
+                flagged_by: r.5,
+                status: r.6,
+                detected_at: r.7,
+            })
+            .collect(),
+    ))
 }
 
 pub async fn admin_review_queue(
@@ -101,16 +135,27 @@ pub async fn admin_review_queue(
     let has_more = rows.len() as i64 > limit;
     let items: Vec<_> = rows.into_iter().take(limit as usize).collect();
     let next_cursor = if has_more {
-        items.last().map(|r| crate::routes::encode_cursor(&r.7, &r.0))
+        items
+            .last()
+            .map(|r| crate::routes::encode_cursor(&r.7, &r.0))
     } else {
         None
     };
 
     Ok(Json(crate::routes::Paginated {
-        data: items.into_iter().map(|r| ContradictionResponse {
-            id: r.0, answer_id_a: r.1, answer_id_b: r.2, explanation: r.3,
-            source: r.4, flagged_by: r.5, status: r.6, detected_at: r.7,
-        }).collect(),
+        data: items
+            .into_iter()
+            .map(|r| ContradictionResponse {
+                id: r.0,
+                answer_id_a: r.1,
+                answer_id_b: r.2,
+                explanation: r.3,
+                source: r.4,
+                flagged_by: r.5,
+                status: r.6,
+                detected_at: r.7,
+            })
+            .collect(),
         next_cursor,
         has_more,
     }))
@@ -178,7 +223,11 @@ async fn do_detect(
                 .execute(db)
                 .await?;
 
-                tracing::info!("contradiction detected between {} and {}", answer_id, other_id);
+                tracing::info!(
+                    "contradiction detected between {} and {}",
+                    answer_id,
+                    other_id
+                );
             }
         }
     }

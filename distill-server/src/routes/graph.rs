@@ -55,11 +55,20 @@ pub async fn get_graph(
     .bind(limit)
     .fetch_all(&state.db)
     .await
-    .map_err(|e| { tracing::error!("graph questions failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+    .map_err(|e| {
+        tracing::error!("graph questions failed: {:?}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
-    let mut nodes: Vec<GraphNode> = questions.iter().map(|q| GraphNode {
-        id: q.0, node_type: "question".into(), label: q.1.clone(), size: q.2 + 1,
-    }).collect();
+    let mut nodes: Vec<GraphNode> = questions
+        .iter()
+        .map(|q| GraphNode {
+            id: q.0,
+            node_type: "question".into(),
+            label: q.1.clone(),
+            size: q.2 + 1,
+        })
+        .collect();
 
     // Get answer nodes and question->answer edges
     let answers = sqlx::query_as::<_, (Uuid, Uuid, i64)>(
@@ -71,22 +80,31 @@ pub async fn get_graph(
     .bind(&questions.iter().map(|q| q.0).collect::<Vec<_>>())
     .fetch_all(&state.db)
     .await
-    .map_err(|e| { tracing::error!("graph answers failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+    .map_err(|e| {
+        tracing::error!("graph answers failed: {:?}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     let mut edges: Vec<GraphEdge> = Vec::new();
 
     for a in &answers {
         nodes.push(GraphNode {
-            id: a.0, node_type: "answer".into(), label: format!("Answer"), size: a.2 + 1,
+            id: a.0,
+            node_type: "answer".into(),
+            label: format!("Answer"),
+            size: a.2 + 1,
         });
         edges.push(GraphEdge {
-            source: a.1, target: a.0, edge_type: "has_answer".into(), weight: 1.0,
+            source: a.1,
+            target: a.0,
+            edge_type: "has_answer".into(),
+            weight: 1.0,
         });
     }
 
     // Get contradiction edges
     let contradictions = sqlx::query_as::<_, (Uuid, Uuid)>(
-        "SELECT answer_id_a, answer_id_b FROM contradiction_flags WHERE status != 'dismissed'"
+        "SELECT answer_id_a, answer_id_b FROM contradiction_flags WHERE status != 'dismissed'",
     )
     .fetch_all(&state.db)
     .await
@@ -94,7 +112,10 @@ pub async fn get_graph(
 
     for c in &contradictions {
         edges.push(GraphEdge {
-            source: c.0, target: c.1, edge_type: "contradicts".into(), weight: 1.0,
+            source: c.0,
+            target: c.1,
+            edge_type: "contradicts".into(),
+            weight: 1.0,
         });
     }
 
@@ -106,23 +127,28 @@ pub async fn get_node_neighborhood(
     Path(id): Path<Uuid>,
 ) -> Result<Json<GraphResponse>, StatusCode> {
     // Get the focal question and its answers
-    let question = sqlx::query_as::<_, (Uuid, String)>(
-        "SELECT id, title FROM questions WHERE id = $1"
-    )
-    .bind(id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|e| { tracing::error!("graph node failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?
-    .ok_or(StatusCode::NOT_FOUND)?;
+    let question =
+        sqlx::query_as::<_, (Uuid, String)>("SELECT id, title FROM questions WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|e| {
+                tracing::error!("graph node failed: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?
+            .ok_or(StatusCode::NOT_FOUND)?;
 
     let mut nodes = vec![GraphNode {
-        id: question.0, node_type: "question".into(), label: question.1, size: 3,
+        id: question.0,
+        node_type: "question".into(),
+        label: question.1,
+        size: 3,
     }];
     let mut edges: Vec<GraphEdge> = Vec::new();
 
     // Answers to this question
     let answers = sqlx::query_as::<_, (Uuid, String)>(
-        "SELECT id, LEFT(body, 50) FROM answers WHERE question_id = $1"
+        "SELECT id, LEFT(body, 50) FROM answers WHERE question_id = $1",
     )
     .bind(id)
     .fetch_all(&state.db)
@@ -130,8 +156,18 @@ pub async fn get_node_neighborhood(
     .unwrap_or_default();
 
     for a in &answers {
-        nodes.push(GraphNode { id: a.0, node_type: "answer".into(), label: a.1.clone(), size: 1 });
-        edges.push(GraphEdge { source: id, target: a.0, edge_type: "has_answer".into(), weight: 1.0 });
+        nodes.push(GraphNode {
+            id: a.0,
+            node_type: "answer".into(),
+            label: a.1.clone(),
+            size: 1,
+        });
+        edges.push(GraphEdge {
+            source: id,
+            target: a.0,
+            edge_type: "has_answer".into(),
+            weight: 1.0,
+        });
     }
 
     // Similar questions (via vector similarity if embedding exists)
@@ -148,8 +184,18 @@ pub async fn get_node_neighborhood(
     .unwrap_or_default();
 
     for s in &similar {
-        nodes.push(GraphNode { id: s.0, node_type: "question".into(), label: s.1.clone(), size: 2 });
-        edges.push(GraphEdge { source: id, target: s.0, edge_type: "similar".into(), weight: s.2 });
+        nodes.push(GraphNode {
+            id: s.0,
+            node_type: "question".into(),
+            label: s.1.clone(),
+            size: 2,
+        });
+        edges.push(GraphEdge {
+            source: id,
+            target: s.0,
+            edge_type: "similar".into(),
+            weight: s.2,
+        });
     }
 
     Ok(Json(GraphResponse { nodes, edges }))

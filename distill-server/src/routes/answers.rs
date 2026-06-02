@@ -45,7 +45,10 @@ pub async fn edit_answer(
         .bind(id)
         .fetch_optional(&state.db)
         .await
-        .map_err(|e| { tracing::error!("edit fetch failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?
+        .map_err(|e| {
+            tracing::error!("edit fetch failed: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
         .ok_or(StatusCode::NOT_FOUND)?;
 
     // Compute diff
@@ -65,7 +68,18 @@ pub async fn edit_answer(
     .map_err(|e| { tracing::error!("edit insert failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
 
     // Update answer body
-    let row = sqlx::query_as::<_, (Uuid, Uuid, Option<Uuid>, String, String, bool, chrono::DateTime<chrono::Utc>)>(
+    let row = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            Uuid,
+            Option<Uuid>,
+            String,
+            String,
+            bool,
+            chrono::DateTime<chrono::Utc>,
+        ),
+    >(
         r#"UPDATE answers SET body = $1, updated_at = now() WHERE id = $2
            RETURNING id, question_id, author_id, author_type, body, is_stale, created_at"#,
     )
@@ -73,11 +87,19 @@ pub async fn edit_answer(
     .bind(id)
     .fetch_one(&state.db)
     .await
-    .map_err(|e| { tracing::error!("edit update failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+    .map_err(|e| {
+        tracing::error!("edit update failed: {:?}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     Ok(Json(AnswerResponse {
-        id: row.0, question_id: row.1, author_id: row.2, author_type: row.3,
-        body: row.4, is_stale: row.5, created_at: row.6,
+        id: row.0,
+        question_id: row.1,
+        author_id: row.2,
+        author_type: row.3,
+        body: row.4,
+        is_stale: row.5,
+        created_at: row.6,
     }))
 }
 
@@ -93,16 +115,35 @@ pub async fn get_history(
     .await
     .map_err(|e| { tracing::error!("history fetch failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
 
-    Ok(Json(rows.into_iter().map(|r| EditHistoryEntry {
-        id: r.0, editor_id: r.1, diff: r.2, edit_message: r.3, created_at: r.4,
-    }).collect()))
+    Ok(Json(
+        rows.into_iter()
+            .map(|r| EditHistoryEntry {
+                id: r.0,
+                editor_id: r.1,
+                diff: r.2,
+                edit_message: r.3,
+                created_at: r.4,
+            })
+            .collect(),
+    ))
 }
 
 pub async fn get_answers(
     State(state): State<AppState>,
     Path(question_id): Path<Uuid>,
 ) -> Result<Json<Vec<AnswerResponse>>, StatusCode> {
-    let rows = sqlx::query_as::<_, (Uuid, Uuid, Option<Uuid>, String, String, bool, chrono::DateTime<chrono::Utc>)>(
+    let rows = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            Uuid,
+            Option<Uuid>,
+            String,
+            String,
+            bool,
+            chrono::DateTime<chrono::Utc>,
+        ),
+    >(
         r#"SELECT id, question_id, author_id, author_type, body, is_stale, created_at
            FROM answers WHERE question_id = $1 ORDER BY created_at ASC"#,
     )
@@ -182,7 +223,8 @@ async fn do_generate_ai_answer(
     ]);
 
     let resp = client.exec_chat(chat_model, chat_req, None).await?;
-    let answer_text = resp.first_text()
+    let answer_text = resp
+        .first_text()
         .ok_or("no text in LLM response")?
         .to_string();
 
@@ -206,7 +248,14 @@ async fn do_generate_ai_answer(
     .await?;
 
     if let Some((answer_id,)) = answer_row {
-        crate::routes::contradictions::detect_contradictions(db, chat_model, answer_id, &answer_text, question_id).await;
+        crate::routes::contradictions::detect_contradictions(
+            db,
+            chat_model,
+            answer_id,
+            &answer_text,
+            question_id,
+        )
+        .await;
     }
 
     Ok(())
@@ -237,8 +286,13 @@ pub async fn mark_stale(
     .ok_or(StatusCode::NOT_FOUND)?;
 
     Ok(Json(AnswerResponse {
-        id: row.0, question_id: row.1, author_id: row.2, author_type: row.3,
-        body: row.4, is_stale: row.5, created_at: row.6,
+        id: row.0,
+        question_id: row.1,
+        author_id: row.2,
+        author_type: row.3,
+        body: row.4,
+        is_stale: row.5,
+        created_at: row.6,
     }))
 }
 
@@ -267,26 +321,32 @@ pub async fn dig_deeper(
         return Err(StatusCode::SERVICE_UNAVAILABLE);
     }
 
-    let chat_model = state.llm_chat_model.as_deref()
+    let chat_model = state
+        .llm_chat_model
+        .as_deref()
         .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
 
     // Get the answer and its question
-    let answer_row = sqlx::query_as::<_, (String, Uuid)>(
-        "SELECT body, question_id FROM answers WHERE id = $1"
-    )
-    .bind(answer_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|e| { tracing::error!("dig deeper fetch failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?
-    .ok_or(StatusCode::NOT_FOUND)?;
+    let answer_row =
+        sqlx::query_as::<_, (String, Uuid)>("SELECT body, question_id FROM answers WHERE id = $1")
+            .bind(answer_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|e| {
+                tracing::error!("dig deeper fetch failed: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?
+            .ok_or(StatusCode::NOT_FOUND)?;
 
-    let question_row = sqlx::query_as::<_, (String, String)>(
-        "SELECT title, body FROM questions WHERE id = $1"
-    )
-    .bind(answer_row.1)
-    .fetch_one(&state.db)
-    .await
-    .map_err(|e| { tracing::error!("dig deeper question fetch failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+    let question_row =
+        sqlx::query_as::<_, (String, String)>("SELECT title, body FROM questions WHERE id = $1")
+            .bind(answer_row.1)
+            .fetch_one(&state.db)
+            .await
+            .map_err(|e| {
+                tracing::error!("dig deeper question fetch failed: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
 
     use genai::chat::{ChatMessage, ChatRequest};
     let client = genai::Client::default();
@@ -298,10 +358,16 @@ pub async fn dig_deeper(
         )),
     ]);
 
-    let resp = client.exec_chat(chat_model, chat_req, None).await
-        .map_err(|e| { tracing::error!("dig deeper LLM failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+    let resp = client
+        .exec_chat(chat_model, chat_req, None)
+        .await
+        .map_err(|e| {
+            tracing::error!("dig deeper LLM failed: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
-    let response_text = resp.first_text()
+    let response_text = resp
+        .first_text()
         .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?
         .to_string();
 
@@ -316,11 +382,21 @@ pub async fn dig_deeper(
     .bind(&response_text)
     .fetch_one(&state.db)
     .await
-    .map_err(|e| { tracing::error!("dig deeper insert failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+    .map_err(|e| {
+        tracing::error!("dig deeper insert failed: {:?}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
-    Ok((StatusCode::CREATED, Json(DigDeeperResponse {
-        id: row.0, answer_id: row.1, prompt: row.2, response: row.3, created_at: row.4,
-    })))
+    Ok((
+        StatusCode::CREATED,
+        Json(DigDeeperResponse {
+            id: row.0,
+            answer_id: row.1,
+            prompt: row.2,
+            response: row.3,
+            created_at: row.4,
+        }),
+    ))
 }
 
 pub async fn get_deep_dives(
@@ -335,7 +411,15 @@ pub async fn get_deep_dives(
     .await
     .map_err(|e| { tracing::error!("get deep dives failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
 
-    Ok(Json(rows.into_iter().map(|r| DigDeeperResponse {
-        id: r.0, answer_id: r.1, prompt: r.2, response: r.3, created_at: r.4,
-    }).collect()))
+    Ok(Json(
+        rows.into_iter()
+            .map(|r| DigDeeperResponse {
+                id: r.0,
+                answer_id: r.1,
+                prompt: r.2,
+                response: r.3,
+                created_at: r.4,
+            })
+            .collect(),
+    ))
 }

@@ -43,7 +43,19 @@ pub async fn create_question(
 ) -> Result<(StatusCode, Json<QuestionResponse>), StatusCode> {
     let original_query = format!("{} {}", req.title, req.body);
 
-    let row = sqlx::query_as::<_, (Uuid, String, String, String, Vec<String>, serde_json::Value, String, chrono::DateTime<chrono::Utc>)>(
+    let row = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            String,
+            String,
+            String,
+            Vec<String>,
+            serde_json::Value,
+            String,
+            chrono::DateTime<chrono::Utc>,
+        ),
+    >(
         r#"INSERT INTO questions (author_id, title, body, original_query, tags, metadata)
            VALUES ($1, $2, $3, $4, $5, $6)
            RETURNING id, title, body, original_query, tags, metadata, status, created_at"#,
@@ -78,7 +90,10 @@ pub async fn create_question(
     // Generate AI answer in background (respects answer_mode config)
     if let Some(chat_model) = &state.llm_chat_model {
         let config = crate::routes::get_config_map(&state.db).await;
-        let answer_mode = config.get("answer_mode").map(|s| s.as_str()).unwrap_or("ai-first");
+        let answer_mode = config
+            .get("answer_mode")
+            .map(|s| s.as_str())
+            .unwrap_or("ai-first");
         if answer_mode != "community-only" {
             let db = state.db.clone();
             let chat_model = chat_model.clone();
@@ -87,7 +102,14 @@ pub async fn create_question(
             let body = req.body.clone();
 
             tokio::spawn(async move {
-                crate::routes::answers::generate_ai_answer(&db, &chat_model, question_id, &title, &body).await;
+                crate::routes::answers::generate_ai_answer(
+                    &db,
+                    &chat_model,
+                    question_id,
+                    &title,
+                    &body,
+                )
+                .await;
             });
         }
     }
@@ -188,43 +210,57 @@ pub async fn preview_question(
         if !crate::routes::is_llm_feature_enabled(&config, "rephrase_enabled") {
             None
         } else {
-        let cache_input = format!("{}:{}", req.title, req.body);
-        let key = crate::routes::llm_cache::cache_key("rephrase", &cache_input);
+            let cache_input = format!("{}:{}", req.title, req.body);
+            let key = crate::routes::llm_cache::cache_key("rephrase", &cache_input);
 
-        if let Some(cached) = crate::routes::llm_cache::get_cached(&state.db, &key).await {
-            Some(cached)
-        } else {
-            use genai::chat::{ChatMessage, ChatRequest};
-            let client = genai::Client::default();
-            let chat_req = ChatRequest::new(vec![
+            if let Some(cached) = crate::routes::llm_cache::get_cached(&state.db, &key).await {
+                Some(cached)
+            } else {
+                use genai::chat::{ChatMessage, ChatRequest};
+                let client = genai::Client::default();
+                let chat_req = ChatRequest::new(vec![
                 ChatMessage::system("You are a helpful assistant that rephrases questions to be clearer and more searchable. Return ONLY the rephrased question, nothing else."),
                 ChatMessage::user(format!("Rephrase this question:\nTitle: {}\nBody: {}", req.title, req.body)),
             ]);
-            match client.exec_chat(model.as_str(), chat_req, None).await {
-                Ok(resp) => {
-                    let text = resp.first_text().map(|s| s.to_string());
-                    if let Some(ref t) = text {
-                        let config = crate::routes::get_config_map(&state.db).await;
-                        let ttl: i64 = config.get("llm_cache_ttl_hours").and_then(|v| v.parse().ok()).unwrap_or(168);
-                        crate::routes::llm_cache::store_cache(&state.db, &key, "rephrase", t, ttl).await;
+                match client.exec_chat(model.as_str(), chat_req, None).await {
+                    Ok(resp) => {
+                        let text = resp.first_text().map(|s| s.to_string());
+                        if let Some(ref t) = text {
+                            let config = crate::routes::get_config_map(&state.db).await;
+                            let ttl: i64 = config
+                                .get("llm_cache_ttl_hours")
+                                .and_then(|v| v.parse().ok())
+                                .unwrap_or(168);
+                            crate::routes::llm_cache::store_cache(
+                                &state.db, &key, "rephrase", t, ttl,
+                            )
+                            .await;
+                        }
+                        text
                     }
-                    text
-                }
-                Err(e) => {
-                    tracing::warn!("rephrase failed: {}", e);
-                    None
+                    Err(e) => {
+                        tracing::warn!("rephrase failed: {}", e);
+                        None
+                    }
                 }
             }
-        }
         }
     } else {
         None
     };
 
     Ok(Json(PreviewResponse {
-        matches: matches.into_iter().map(|r| SearchResult {
-            id: r.0, title: r.1, body: r.2, tags: r.3, score: r.4, created_at: r.5,
-        }).collect(),
+        matches: matches
+            .into_iter()
+            .map(|r| SearchResult {
+                id: r.0,
+                title: r.1,
+                body: r.2,
+                tags: r.3,
+                score: r.4,
+                created_at: r.5,
+            })
+            .collect(),
         rephrased,
     }))
 }
@@ -260,7 +296,10 @@ pub async fn search_questions(
     let k: f64 = 60.0;
 
     let config = crate::routes::get_config_map(&state.db).await;
-    let search_mode = config.get("search_mode").map(|s| s.as_str()).unwrap_or("hybrid");
+    let search_mode = config
+        .get("search_mode")
+        .map(|s| s.as_str())
+        .unwrap_or("hybrid");
 
     // Generate embedding for the query if model is configured and search_mode is hybrid
     let query_embedding = if search_mode == "hybrid" {

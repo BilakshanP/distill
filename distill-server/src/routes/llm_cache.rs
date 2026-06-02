@@ -1,4 +1,4 @@
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 
 pub fn cache_key(operation: &str, input: &str) -> String {
@@ -11,7 +11,7 @@ pub fn cache_key(operation: &str, input: &str) -> String {
 
 pub async fn get_cached(db: &PgPool, key: &str) -> Option<String> {
     let row = sqlx::query_as::<_, (String,)>(
-        "SELECT response FROM llm_cache WHERE cache_key = $1 AND expires_at > now()"
+        "SELECT response FROM llm_cache WHERE cache_key = $1 AND expires_at > now()",
     )
     .bind(key)
     .fetch_optional(db)

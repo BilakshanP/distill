@@ -6,7 +6,7 @@ use axum::{
 };
 use oauth2::{
     basic::BasicClient, AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken,
-    EndpointSet, EndpointNotSet, RedirectUrl, Scope, TokenResponse, TokenUrl,
+    EndpointNotSet, EndpointSet, RedirectUrl, Scope, TokenResponse, TokenUrl,
 };
 use serde::Deserialize;
 
@@ -25,7 +25,10 @@ struct GitHubUser {
 type GhOAuthClient = oauth2::Client<
     oauth2::StandardErrorResponse<oauth2::basic::BasicErrorResponseType>,
     oauth2::StandardTokenResponse<oauth2::EmptyExtraTokenFields, oauth2::basic::BasicTokenType>,
-    oauth2::StandardTokenIntrospectionResponse<oauth2::EmptyExtraTokenFields, oauth2::basic::BasicTokenType>,
+    oauth2::StandardTokenIntrospectionResponse<
+        oauth2::EmptyExtraTokenFields,
+        oauth2::basic::BasicTokenType,
+    >,
     oauth2::StandardRevocableToken,
     oauth2::StandardErrorResponse<oauth2::RevocationErrorResponseType>,
     EndpointSet,

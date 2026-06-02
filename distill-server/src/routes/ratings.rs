@@ -54,11 +54,20 @@ pub async fn create_rating(
     .await
     .map_err(|e| { tracing::error!("rating insert failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
 
-    Ok((StatusCode::CREATED, Json(RatingResponse {
-        id: row.0, answer_id: row.1, rater_id: row.2, score: row.3,
-        scale_type: row.4, comment: row.5, tags: row.6,
-        rater_original_query: row.7, created_at: row.8,
-    })))
+    Ok((
+        StatusCode::CREATED,
+        Json(RatingResponse {
+            id: row.0,
+            answer_id: row.1,
+            rater_id: row.2,
+            score: row.3,
+            scale_type: row.4,
+            comment: row.5,
+            tags: row.6,
+            rater_original_query: row.7,
+            created_at: row.8,
+        }),
+    ))
 }
 
 pub async fn redact_rating(
@@ -107,17 +116,28 @@ pub async fn get_ratings(
     let has_more = rows.len() as i64 > limit;
     let items: Vec<_> = rows.into_iter().take(limit as usize).collect();
     let next_cursor = if has_more {
-        items.last().map(|r| crate::routes::encode_cursor(&r.8, &r.0))
+        items
+            .last()
+            .map(|r| crate::routes::encode_cursor(&r.8, &r.0))
     } else {
         None
     };
 
     Ok(Json(crate::routes::Paginated {
-        data: items.into_iter().map(|r| RatingResponse {
-            id: r.0, answer_id: r.1, rater_id: r.2, score: r.3,
-            scale_type: r.4, comment: r.5, tags: r.6,
-            rater_original_query: r.7, created_at: r.8,
-        }).collect(),
+        data: items
+            .into_iter()
+            .map(|r| RatingResponse {
+                id: r.0,
+                answer_id: r.1,
+                rater_id: r.2,
+                score: r.3,
+                scale_type: r.4,
+                comment: r.5,
+                tags: r.6,
+                rater_original_query: r.7,
+                created_at: r.8,
+            })
+            .collect(),
         next_cursor,
         has_more,
     }))

@@ -1,6 +1,6 @@
 use distill_server::{build_router, AppState};
-use sqlx::postgres::PgPoolOptions;
 use sqlx::migrate::Migrator;
+use sqlx::postgres::PgPoolOptions;
 use tracing_subscriber::EnvFilter;
 
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");

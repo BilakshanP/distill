@@ -32,7 +32,9 @@ impl Config {
                 .expect("GITHUB_CLIENT_SECRET must be set"),
             base_url: env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:3000".into()),
             llm_chat_model: env::var("LLM_CHAT_MODEL").ok().filter(|s| !s.is_empty()),
-            llm_embedding_model: env::var("LLM_EMBEDDING_MODEL").ok().filter(|s| !s.is_empty()),
+            llm_embedding_model: env::var("LLM_EMBEDDING_MODEL")
+                .ok()
+                .filter(|s| !s.is_empty()),
         }
     }
 }
