@@ -108,6 +108,8 @@ async fn main() {
         .route("/answers/{id}/contradictions", get(routes::contradictions::get_contradictions_for_answer))
         .route("/admin/contradictions", get(routes::contradictions::admin_review_queue))
         .route("/admin/config", get(routes::admin::get_config).put(routes::admin::update_config))
+        .route("/graph", get(routes::graph::get_graph))
+        .route("/graph/node/{id}", get(routes::graph::get_node_neighborhood))
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
