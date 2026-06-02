@@ -94,6 +94,7 @@ async fn main() {
         .route("/auth/github/callback", get(auth::oauth::github_callback))
         .route("/me", get(me))
         .route("/questions", axum::routing::post(routes::questions::create_question))
+        .route("/questions/search", get(routes::questions::search_questions))
         .route("/questions/{id}", get(routes::questions::get_question))
         .layer(TraceLayer::new_for_http())
         .with_state(state);

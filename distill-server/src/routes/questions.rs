@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     Json,
 };
@@ -89,6 +89,128 @@ pub async fn create_question(
             has_embedding: false, // async, not ready yet
             created_at: row.7,
         }),
+    ))
+}
+
+#[derive(Deserialize)]
+pub struct SearchParams {
+    pub q: String,
+    #[serde(default = "default_limit")]
+    pub limit: i64,
+    #[serde(default)]
+    pub offset: i64,
+}
+
+fn default_limit() -> i64 {
+    20
+}
+
+#[derive(Serialize)]
+pub struct SearchResult {
+    pub id: Uuid,
+    pub title: String,
+    pub body: String,
+    pub tags: Vec<String>,
+    pub score: f64,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub async fn search_questions(
+    State(state): State<AppState>,
+    Query(params): Query<SearchParams>,
+) -> Result<Json<Vec<SearchResult>>, StatusCode> {
+    let limit = params.limit.min(100);
+    let k: f64 = 60.0;
+
+    // Generate embedding for the query if model is configured
+    let query_embedding = if let Some(model) = &state.llm_embedding_model {
+        let client = genai::Client::default();
+        match client.embed(model.as_str(), &params.q, None).await {
+            Ok(resp) => Some(pgvector::Vector::from(resp.embeddings[0].vector.clone())),
+            Err(e) => {
+                tracing::warn!("embedding generation for search query failed: {}", e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    let results = if let Some(embedding) = query_embedding {
+        // Hybrid search: BM25 + vector with RRF
+        sqlx::query_as::<_, (Uuid, String, String, Vec<String>, f64, chrono::DateTime<chrono::Utc>)>(
+            r#"
+            WITH fts AS (
+                SELECT id, ts_rank(tsv, websearch_to_tsquery('english', $1)) AS rank,
+                       ROW_NUMBER() OVER (ORDER BY ts_rank(tsv, websearch_to_tsquery('english', $1)) DESC) AS rn
+                FROM questions
+                WHERE tsv @@ websearch_to_tsquery('english', $1)
+                LIMIT 100
+            ),
+            vec AS (
+                SELECT id, 1 - (embedding <=> $2) AS rank,
+                       ROW_NUMBER() OVER (ORDER BY embedding <=> $2) AS rn
+                FROM questions
+                WHERE embedding IS NOT NULL
+                LIMIT 100
+            ),
+            rrf AS (
+                SELECT COALESCE(fts.id, vec.id) AS id,
+                       COALESCE(1.0 / ($3 + fts.rn), 0.0) + COALESCE(1.0 / ($3 + vec.rn), 0.0) AS score
+                FROM fts FULL OUTER JOIN vec ON fts.id = vec.id
+            )
+            SELECT q.id, q.title, q.body, q.tags, rrf.score, q.created_at
+            FROM rrf
+            JOIN questions q ON q.id = rrf.id
+            ORDER BY rrf.score DESC
+            LIMIT $4 OFFSET $5
+            "#,
+        )
+        .bind(&params.q)
+        .bind(&embedding)
+        .bind(k)
+        .bind(limit)
+        .bind(params.offset)
+        .fetch_all(&state.db)
+        .await
+        .map_err(|e| {
+            tracing::error!("hybrid search failed: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+    } else {
+        // Keyword-only fallback
+        sqlx::query_as::<_, (Uuid, String, String, Vec<String>, f64, chrono::DateTime<chrono::Utc>)>(
+            r#"
+            SELECT id, title, body, tags, ts_rank(tsv, websearch_to_tsquery('english', $1))::float8 AS score, created_at
+            FROM questions
+            WHERE tsv @@ websearch_to_tsquery('english', $1)
+            ORDER BY score DESC
+            LIMIT $2 OFFSET $3
+            "#,
+        )
+        .bind(&params.q)
+        .bind(limit)
+        .bind(params.offset)
+        .fetch_all(&state.db)
+        .await
+        .map_err(|e| {
+            tracing::error!("keyword search failed: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+    };
+
+    Ok(Json(
+        results
+            .into_iter()
+            .map(|r| SearchResult {
+                id: r.0,
+                title: r.1,
+                body: r.2,
+                tags: r.3,
+                score: r.4,
+                created_at: r.5,
+            })
+            .collect(),
     ))
 }
 
