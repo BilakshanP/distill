@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-// Re-export for convenience
 pub use uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -64,6 +63,13 @@ pub struct RatingResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct Paginated<T> {
+    pub data: Vec<T>,
+    pub next_cursor: Option<String>,
+    pub has_more: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct DigDeeperResponse {
     pub id: Uuid,
     pub answer_id: Uuid,
@@ -95,15 +101,50 @@ pub struct GraphEdge {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct AuthResponse {
-    pub token: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 pub struct EditHistoryEntry {
     pub id: Uuid,
     pub editor_id: Uuid,
     pub diff: String,
     pub edit_message: Option<String>,
     pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ContradictionResponse {
+    pub id: Uuid,
+    pub answer_id_a: Uuid,
+    pub answer_id_b: Uuid,
+    pub explanation: String,
+    pub source: String,
+    pub flagged_by: Option<Uuid>,
+    pub status: String,
+    pub detected_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TagCount {
+    pub tag: String,
+    pub count: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LinkResponse {
+    pub id: Uuid,
+    pub question_id_a: Uuid,
+    pub question_id_b: Uuid,
+    pub link_type: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CommentResponse {
+    pub id: Uuid,
+    pub author_id: Uuid,
+    pub body: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ConfigResponse {
+    pub config: std::collections::HashMap<String, String>,
 }
