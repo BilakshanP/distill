@@ -201,34 +201,48 @@ async fn do_detect(
     }
 
     let client = genai::Client::default();
+    let config = crate::routes::get_config_map(db).await;
+    let ttl: i64 = config
+        .get("llm_cache_ttl_hours")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(168);
 
     for (other_id, other_body) in &other_answers {
-        let chat_req = ChatRequest::new(vec![
-            ChatMessage::system("You are a contradiction detector. Compare two answers and determine if they contradict each other. Reply ONLY with 'NO' if they don't contradict, or a brief explanation of the contradiction if they do."),
-            ChatMessage::user(format!("Answer A:\n{}\n\nAnswer B:\n{}", answer_body, other_body)),
-        ]);
+        let cache_input = format!("{}:{}", answer_body, other_body);
+        let cache_key = crate::routes::llm_cache::cache_key("contradiction", &cache_input);
 
-        let resp = client.exec_chat(chat_model, chat_req, None).await?;
-        if let Some(text) = resp.first_text() {
-            let text = text.trim();
-            if text != "NO" && !text.to_lowercase().starts_with("no") {
-                // Contradiction found
-                sqlx::query(
-                    r#"INSERT INTO contradiction_flags (answer_id_a, answer_id_b, explanation, source)
-                       VALUES ($1, $2, $3, 'auto')"#,
-                )
-                .bind(answer_id)
-                .bind(other_id)
-                .bind(text)
-                .execute(db)
-                .await?;
+        let text = if let Some(cached) = crate::routes::llm_cache::get_cached(db, &cache_key).await
+        {
+            cached
+        } else {
+            let chat_req = ChatRequest::new(vec![
+                ChatMessage::system("You are a contradiction detector. Compare two answers and determine if they contradict each other. Reply ONLY with 'NO' if they don't contradict, or a brief explanation of the contradiction if they do."),
+                ChatMessage::user(format!("Answer A:\n{}\n\nAnswer B:\n{}", answer_body, other_body)),
+            ]);
 
-                tracing::info!(
-                    "contradiction detected between {} and {}",
-                    answer_id,
-                    other_id
-                );
-            }
+            let resp = client.exec_chat(chat_model, chat_req, None).await?;
+            let result = resp.first_text().unwrap_or("NO").trim().to_string();
+            crate::routes::llm_cache::store_cache(db, &cache_key, "contradiction", &result, ttl)
+                .await;
+            result
+        };
+
+        if text != "NO" && !text.to_lowercase().starts_with("no") {
+            sqlx::query(
+                r#"INSERT INTO contradiction_flags (answer_id_a, answer_id_b, explanation, source)
+                   VALUES ($1, $2, $3, 'auto')"#,
+            )
+            .bind(answer_id)
+            .bind(other_id)
+            .bind(&text)
+            .execute(db)
+            .await?;
+
+            tracing::info!(
+                "contradiction detected between {} and {}",
+                answer_id,
+                other_id
+            );
         }
     }
 

@@ -380,28 +380,49 @@ pub async fn dig_deeper(
         String::new()
     };
 
-    use genai::chat::{ChatMessage, ChatRequest};
-    let client = genai::Client::default();
-    let chat_req = ChatRequest::new(vec![
-        ChatMessage::system("You are a knowledgeable assistant. The user wants to explore an answer in more depth. Consider the comments/discussion context as well. Provide a detailed, helpful response."),
-        ChatMessage::user(format!(
-            "Original question: {} - {}\n\nCurrent answer:\n{}{}\n\nUser's follow-up:\n{}",
-            question_row.0, question_row.1, answer_row.0, comments_ctx, req.prompt
-        )),
-    ]);
+    let cache_input = format!(
+        "{}:{}:{}:{}",
+        question_row.0, answer_row.0, comments_ctx, req.prompt
+    );
+    let cache_key = crate::routes::llm_cache::cache_key("dig_deeper", &cache_input);
 
-    let resp = client
-        .exec_chat(chat_model, chat_req, None)
-        .await
-        .map_err(|e| {
-            tracing::error!("dig deeper LLM failed: {:?}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let response_text = if let Some(cached) =
+        crate::routes::llm_cache::get_cached(&state.db, &cache_key).await
+    {
+        cached
+    } else {
+        use genai::chat::{ChatMessage, ChatRequest};
+        let client = genai::Client::default();
+        let chat_req = ChatRequest::new(vec![
+            ChatMessage::system("You are a knowledgeable assistant. The user wants to explore an answer in more depth. Consider the comments/discussion context as well. Provide a detailed, helpful response."),
+            ChatMessage::user(format!(
+                "Original question: {} - {}\n\nCurrent answer:\n{}{}\n\nUser's follow-up:\n{}",
+                question_row.0, question_row.1, answer_row.0, comments_ctx, req.prompt
+            )),
+        ]);
 
-    let response_text = resp
-        .first_text()
-        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?
-        .to_string();
+        let resp = client
+            .exec_chat(chat_model, chat_req, None)
+            .await
+            .map_err(|e| {
+                tracing::error!("dig deeper LLM failed: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+
+        let text = resp
+            .first_text()
+            .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?
+            .to_string();
+
+        let config = crate::routes::get_config_map(&state.db).await;
+        let ttl: i64 = config
+            .get("llm_cache_ttl_hours")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(168);
+        crate::routes::llm_cache::store_cache(&state.db, &cache_key, "dig_deeper", &text, ttl)
+            .await;
+        text
+    };
 
     let row = sqlx::query_as::<_, (Uuid, Uuid, String, String, chrono::DateTime<chrono::Utc>)>(
         r#"INSERT INTO deep_dives (answer_id, requester_id, prompt, response, context_sources)
