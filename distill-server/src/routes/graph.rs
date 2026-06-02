@@ -77,7 +77,7 @@ pub async fn get_graph(
            WHERE a.question_id = ANY($1)
            GROUP BY a.id"#,
     )
-    .bind(&questions.iter().map(|q| q.0).collect::<Vec<_>>())
+    .bind(questions.iter().map(|q| q.0).collect::<Vec<_>>())
     .fetch_all(&state.db)
     .await
     .map_err(|e| {
@@ -91,7 +91,7 @@ pub async fn get_graph(
         nodes.push(GraphNode {
             id: a.0,
             node_type: "answer".into(),
-            label: format!("Answer"),
+            label: "Answer".to_string(),
             size: a.2 + 1,
         });
         edges.push(GraphEdge {

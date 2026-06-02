@@ -4,3 +4,9 @@ if [ $? -ne 0 ]; then
     echo "Run 'cargo fmt' before committing."
     exit 1
 fi
+
+cargo clippy -- -D warnings
+if [ $? -ne 0 ]; then
+    echo "Fix clippy warnings before committing."
+    exit 1
+fi
