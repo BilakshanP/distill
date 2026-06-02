@@ -301,6 +301,29 @@ pub async fn mark_stale(
     .map_err(|e| { tracing::error!("mark stale failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?
     .ok_or(StatusCode::NOT_FOUND)?;
 
+    // Trigger LLM auto-resolve if configured
+    if let Some(chat_model) = &state.llm_chat_model {
+        let config = crate::routes::get_config_map(&state.db).await;
+        if config
+            .get("stale_auto_resolve")
+            .map(|v| v == "true")
+            .unwrap_or(false)
+            && crate::routes::is_llm_feature_enabled(&config, "llm_features_enabled")
+        {
+            let db = state.db.clone();
+            let model = chat_model.clone();
+            let answer_id = id;
+            let body = row.4.clone();
+            let reason = req.reason.clone().unwrap_or_default();
+
+            tokio::spawn(async move {
+                if let Err(e) = resolve_stale(&db, &model, answer_id, &body, &reason).await {
+                    tracing::error!("stale auto-resolve failed for {}: {:?}", answer_id, e);
+                }
+            });
+        }
+    }
+
     Ok(Json(AnswerResponse {
         id: row.0,
         question_id: row.1,
@@ -487,4 +510,58 @@ pub async fn get_deep_dives(
             })
             .collect(),
     ))
+}
+
+async fn resolve_stale(
+    db: &sqlx::PgPool,
+    chat_model: &str,
+    answer_id: uuid::Uuid,
+    old_body: &str,
+    stale_reason: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use genai::chat::{ChatMessage, ChatRequest};
+
+    let client = genai::Client::default();
+    let chat_req = ChatRequest::new(vec![
+        ChatMessage::system("You are a knowledgeable assistant. An answer has been marked as stale/outdated. Generate an updated version of the answer based on the staleness reason. Return ONLY the updated answer text."),
+        ChatMessage::user(format!(
+            "Original answer:\n{}\n\nReason it's stale: {}",
+            old_body, stale_reason
+        )),
+    ]);
+
+    let config = crate::routes::get_config_map(db).await;
+    let retries: u32 = config
+        .get("llm_retry_attempts")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(3);
+
+    let resp = crate::routes::llm_cache::retry_llm(retries, || {
+        let req = chat_req.clone();
+        let c = &client;
+        async move { c.exec_chat(chat_model, req, None).await }
+    })
+    .await?;
+
+    if let Some(updated) = resp.first_text() {
+        // Store as a new answer (AI-generated replacement)
+        let question_id: (uuid::Uuid,) =
+            sqlx::query_as("SELECT question_id FROM answers WHERE id = $1")
+                .bind(answer_id)
+                .fetch_one(db)
+                .await?;
+
+        sqlx::query("INSERT INTO answers (question_id, author_type, body) VALUES ($1, 'ai', $2)")
+            .bind(question_id.0)
+            .bind(updated.trim())
+            .execute(db)
+            .await?;
+
+        tracing::info!(
+            "stale answer {} auto-resolved with new AI answer",
+            answer_id
+        );
+    }
+
+    Ok(())
 }
