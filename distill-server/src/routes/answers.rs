@@ -262,6 +262,11 @@ pub async fn dig_deeper(
     auth: AuthUser,
     Json(req): Json<DigDeeperRequest>,
 ) -> Result<(StatusCode, Json<DigDeeperResponse>), StatusCode> {
+    let config = crate::routes::get_config_map(&state.db).await;
+    if !crate::routes::is_llm_feature_enabled(&config, "dig_deeper_enabled") {
+        return Err(StatusCode::SERVICE_UNAVAILABLE);
+    }
+
     let chat_model = state.llm_chat_model.as_deref()
         .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
 

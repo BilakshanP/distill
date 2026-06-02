@@ -124,6 +124,10 @@ pub async fn detect_contradictions(
     answer_body: &str,
     question_id: Uuid,
 ) {
+    let config = crate::routes::get_config_map(db).await;
+    if !crate::routes::is_llm_feature_enabled(&config, "auto_contradiction_detection") {
+        return;
+    }
     if let Err(e) = do_detect(db, chat_model, answer_id, answer_body, question_id).await {
         tracing::error!("contradiction detection failed for {}: {:?}", answer_id, e);
     }

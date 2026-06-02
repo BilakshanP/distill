@@ -37,6 +37,14 @@ pub struct Paginated<T: Serialize> {
     pub has_more: bool,
 }
 
+pub fn is_llm_feature_enabled(config: &HashMap<String, String>, feature_key: &str) -> bool {
+    let global = config.get("llm_features_enabled").map(|v| v == "true").unwrap_or(true);
+    if !global {
+        return false;
+    }
+    config.get(feature_key).map(|v| v == "true").unwrap_or(true)
+}
+
 pub fn encode_cursor(created_at: &chrono::DateTime<chrono::Utc>, id: &uuid::Uuid) -> String {
     use base64::Engine;
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(format!("{},{}", created_at.to_rfc3339(), id))

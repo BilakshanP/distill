@@ -184,6 +184,10 @@ pub async fn preview_question(
 
     // Rephrase via LLM (with cache)
     let rephrased = if let Some(model) = &state.llm_chat_model {
+        let config = crate::routes::get_config_map(&state.db).await;
+        if !crate::routes::is_llm_feature_enabled(&config, "rephrase_enabled") {
+            None
+        } else {
         let cache_input = format!("{}:{}", req.title, req.body);
         let key = crate::routes::llm_cache::cache_key("rephrase", &cache_input);
 
@@ -211,6 +215,7 @@ pub async fn preview_question(
                     None
                 }
             }
+        }
         }
     } else {
         None
