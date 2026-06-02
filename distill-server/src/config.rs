@@ -5,6 +5,10 @@ pub struct Config {
     pub host: String,
     pub port: u16,
     pub auto_migrate: bool,
+    pub jwt_secret: String,
+    pub github_client_id: String,
+    pub github_client_secret: String,
+    pub base_url: String,
 }
 
 impl Config {
@@ -20,6 +24,11 @@ impl Config {
                 .unwrap_or_else(|_| "false".into())
                 .parse()
                 .unwrap_or(false),
+            jwt_secret: env::var("JWT_SECRET").expect("JWT_SECRET must be set"),
+            github_client_id: env::var("GITHUB_CLIENT_ID").expect("GITHUB_CLIENT_ID must be set"),
+            github_client_secret: env::var("GITHUB_CLIENT_SECRET")
+                .expect("GITHUB_CLIENT_SECRET must be set"),
+            base_url: env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:3000".into()),
         }
     }
 }

@@ -1,3 +1,4 @@
+mod auth;
 mod config;
 
 use axum::{extract::State, http::StatusCode, routing::get, Json, Router};
@@ -6,11 +7,17 @@ use sqlx::{migrate::Migrator, PgPool};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 
+use auth::middleware::AuthUser;
+
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 
 #[derive(Clone)]
-struct AppState {
-    db: PgPool,
+pub struct AppState {
+    pub db: PgPool,
+    pub jwt_secret: String,
+    pub github_client_id: String,
+    pub github_client_secret: String,
+    pub base_url: String,
 }
 
 async fn health(State(state): State<AppState>) -> Result<Json<serde_json::Value>, StatusCode> {
@@ -20,6 +27,28 @@ async fn health(State(state): State<AppState>) -> Result<Json<serde_json::Value>
         .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
 
     Ok(Json(serde_json::json!({ "status": "ok" })))
+}
+
+async fn me(
+    State(state): State<AppState>,
+    auth: AuthUser,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let user = sqlx::query_as::<_, (uuid::Uuid, String, Option<String>, Option<String>, String)>(
+        "SELECT id, display_name, email, avatar_url, role FROM users WHERE id = $1",
+    )
+    .bind(auth.user_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .ok_or(StatusCode::NOT_FOUND)?;
+
+    Ok(Json(serde_json::json!({
+        "id": user.0,
+        "display_name": user.1,
+        "email": user.2,
+        "avatar_url": user.3,
+        "role": user.4,
+    })))
 }
 
 #[tokio::main]
@@ -42,10 +71,19 @@ async fn main() {
         MIGRATOR.run(&db).await.expect("Failed to run migrations");
     }
 
-    let state = AppState { db };
+    let state = AppState {
+        db,
+        jwt_secret: cfg.jwt_secret,
+        github_client_id: cfg.github_client_id,
+        github_client_secret: cfg.github_client_secret,
+        base_url: cfg.base_url,
+    };
 
     let app = Router::new()
         .route("/health", get(health))
+        .route("/auth/github", get(auth::oauth::github_login))
+        .route("/auth/github/callback", get(auth::oauth::github_callback))
+        .route("/me", get(me))
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
