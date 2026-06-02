@@ -207,6 +207,11 @@ async fn do_detect(
         .and_then(|v| v.parse().ok())
         .unwrap_or(168);
 
+    let retries: u32 = config
+        .get("llm_retry_attempts")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(3);
+
     for (other_id, other_body) in &other_answers {
         let cache_input = format!("{}:{}", answer_body, other_body);
         let cache_key = crate::routes::llm_cache::cache_key("contradiction", &cache_input);
@@ -220,7 +225,12 @@ async fn do_detect(
                 ChatMessage::user(format!("Answer A:\n{}\n\nAnswer B:\n{}", answer_body, other_body)),
             ]);
 
-            let resp = client.exec_chat(chat_model, chat_req, None).await?;
+            let resp = crate::routes::llm_cache::retry_llm(retries, || {
+                let req = chat_req.clone();
+                let c = &client;
+                async move { c.exec_chat(chat_model, req, None).await }
+            })
+            .await?;
             let result = resp.first_text().unwrap_or("NO").trim().to_string();
             crate::routes::llm_cache::store_cache(db, &cache_key, "contradiction", &result, ttl)
                 .await;

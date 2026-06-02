@@ -33,3 +33,36 @@ pub async fn store_cache(db: &PgPool, key: &str, operation: &str, response: &str
     .execute(db)
     .await;
 }
+
+/// Retry an async LLM call up to `max_retries` times on transient errors.
+pub async fn retry_llm<F, Fut, T, E>(max_retries: u32, mut f: F) -> Result<T, E>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<T, E>>,
+    E: std::fmt::Display,
+{
+    let mut attempt = 0;
+    loop {
+        match f().await {
+            Ok(v) => return Ok(v),
+            Err(e) => {
+                attempt += 1;
+                if attempt > max_retries {
+                    return Err(e);
+                }
+                let msg = e.to_string();
+                if msg.contains("503") || msg.contains("429") || msg.contains("UNAVAILABLE") {
+                    tracing::warn!(
+                        "LLM transient error (attempt {}/{}): {}",
+                        attempt,
+                        max_retries,
+                        msg
+                    );
+                    tokio::time::sleep(std::time::Duration::from_secs(2u64.pow(attempt))).await;
+                } else {
+                    return Err(e);
+                }
+            }
+        }
+    }
+}

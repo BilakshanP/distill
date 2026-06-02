@@ -226,7 +226,18 @@ async fn do_generate_ai_answer(
         ChatMessage::user(format!("Question: {}\n\n{}", title, body)),
     ]);
 
-    let resp = client.exec_chat(chat_model, chat_req, None).await?;
+    let config = crate::routes::get_config_map(db).await;
+    let retries: u32 = config
+        .get("llm_retry_attempts")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(3);
+
+    let resp = crate::routes::llm_cache::retry_llm(retries, || {
+        let req = chat_req.clone();
+        let c = &client;
+        async move { c.exec_chat(chat_model, req, None).await }
+    })
+    .await?;
     let answer_text = resp
         .first_text()
         .ok_or("no text in LLM response")?
