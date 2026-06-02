@@ -56,6 +56,21 @@ Server starts at `http://localhost:3000`.
 cargo test -p distill-server
 ```
 
+### Migrations
+
+Migrations run automatically on boot if `AUTO_MIGRATE=true` (default in `.env.example`).
+
+To run manually:
+```bash
+cargo install sqlx-cli --no-default-features --features postgres
+sqlx migrate run --source distill-server/migrations
+```
+
+To reset the database (destroys all data):
+```bash
+docker compose down -v && docker compose up -d
+```
+
 ### Swagger UI
 
 ```bash
