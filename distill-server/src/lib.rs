@@ -65,6 +65,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/answers/{id}/history", get(routes::answers::get_history))
         .route("/answers/{id}/dig-deeper", axum::routing::post(routes::answers::dig_deeper))
         .route("/answers/{id}/deep-dives", get(routes::answers::get_deep_dives))
+        .route("/answers/{id}/mark-stale", axum::routing::post(routes::answers::mark_stale))
         .route("/answers/{id}/ratings", axum::routing::post(routes::ratings::create_rating).get(routes::ratings::get_ratings))
         .route("/answers/{id}/flag-contradiction", axum::routing::post(routes::contradictions::flag_contradiction))
         .route("/answers/{id}/contradictions", get(routes::contradictions::get_contradictions_for_answer))

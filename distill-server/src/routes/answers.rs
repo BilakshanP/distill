@@ -213,6 +213,36 @@ async fn do_generate_ai_answer(
 }
 
 #[derive(Deserialize)]
+pub struct MarkStaleRequest {
+    pub reason: Option<String>,
+}
+
+pub async fn mark_stale(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    auth: AuthUser,
+    Json(req): Json<MarkStaleRequest>,
+) -> Result<Json<AnswerResponse>, StatusCode> {
+    let row = sqlx::query_as::<_, (Uuid, Uuid, Option<Uuid>, String, String, bool, chrono::DateTime<chrono::Utc>)>(
+        r#"UPDATE answers SET is_stale = true, stale_reason = $1, stale_marked_by = $2, updated_at = now()
+           WHERE id = $3
+           RETURNING id, question_id, author_id, author_type, body, is_stale, created_at"#,
+    )
+    .bind(&req.reason)
+    .bind(auth.user_id)
+    .bind(id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|e| { tracing::error!("mark stale failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?
+    .ok_or(StatusCode::NOT_FOUND)?;
+
+    Ok(Json(AnswerResponse {
+        id: row.0, question_id: row.1, author_id: row.2, author_type: row.3,
+        body: row.4, is_stale: row.5, created_at: row.6,
+    }))
+}
+
+#[derive(Deserialize)]
 pub struct DigDeeperRequest {
     pub prompt: String,
 }
