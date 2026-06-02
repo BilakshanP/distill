@@ -5,8 +5,51 @@ pub mod routes;
 use axum::{extract::State, http::StatusCode, routing::get, Json, Router};
 use sqlx::PgPool;
 use tower_http::trace::TraceLayer;
+use utoipa::OpenApi;
+#[cfg(feature = "swagger")]
+use utoipa_swagger_ui::SwaggerUi;
 
 use auth::middleware::AuthUser;
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(
+        routes::questions::create_question,
+        routes::questions::get_question,
+        routes::questions::search_questions,
+        routes::questions::preview_question,
+        routes::answers::get_answers,
+        routes::answers::edit_answer,
+        routes::answers::get_history,
+        routes::answers::mark_stale,
+        routes::answers::dig_deeper,
+        routes::answers::get_deep_dives,
+        routes::ratings::create_rating,
+        routes::ratings::get_ratings,
+        routes::ratings::redact_rating,
+    ),
+    components(schemas(
+        routes::questions::CreateQuestionRequest,
+        routes::questions::QuestionResponse,
+        routes::questions::SearchResult,
+        routes::questions::PreviewRequest,
+        routes::questions::PreviewResponse,
+        routes::answers::AnswerResponse,
+        routes::answers::EditAnswerRequest,
+        routes::answers::EditHistoryEntry,
+        routes::answers::MarkStaleRequest,
+        routes::answers::DigDeeperRequest,
+        routes::answers::DigDeeperResponse,
+        routes::ratings::CreateRatingRequest,
+        routes::ratings::RatingResponse,
+    )),
+    tags(
+        (name = "questions", description = "Question endpoints"),
+        (name = "answers", description = "Answer endpoints"),
+        (name = "ratings", description = "Rating endpoints"),
+    )
+)]
+struct ApiDoc;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -81,7 +124,7 @@ async fn delete_me(
 }
 
 pub fn build_router(state: AppState) -> Router {
-    Router::new()
+    let app = Router::new()
         .route("/health", get(health))
         .route("/auth/github", get(auth::oauth::github_login))
         .route("/auth/github/callback", get(auth::oauth::github_callback))
@@ -147,5 +190,11 @@ pub fn build_router(state: AppState) -> Router {
             get(routes::graph::get_node_neighborhood),
         )
         .layer(TraceLayer::new_for_http())
-        .with_state(state)
+        .with_state(state);
+
+    #[cfg(feature = "swagger")]
+    let app =
+        app.merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()));
+
+    app
 }

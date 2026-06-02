@@ -4,11 +4,12 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::{auth::middleware::AuthUser, AppState};
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct AnswerResponse {
     pub id: Uuid,
     pub question_id: Uuid,
@@ -19,13 +20,13 @@ pub struct AnswerResponse {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct EditAnswerRequest {
     pub body: String,
     pub edit_message: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct EditHistoryEntry {
     pub id: Uuid,
     pub editor_id: Uuid,
@@ -34,6 +35,7 @@ pub struct EditHistoryEntry {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
+#[utoipa::path(put, path = "/answers/{id}", request_body = EditAnswerRequest, responses((status = 200, body = AnswerResponse)), tag = "answers")]
 pub async fn edit_answer(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -103,6 +105,7 @@ pub async fn edit_answer(
     }))
 }
 
+#[utoipa::path(get, path = "/answers/{id}/history", responses((status = 200, body = Vec<EditHistoryEntry>)), tag = "answers")]
 pub async fn get_history(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -128,6 +131,7 @@ pub async fn get_history(
     ))
 }
 
+#[utoipa::path(get, path = "/questions/{id}/answers", responses((status = 200, body = Vec<AnswerResponse>)), tag = "answers")]
 pub async fn get_answers(
     State(state): State<AppState>,
     Path(question_id): Path<Uuid>,
@@ -261,11 +265,12 @@ async fn do_generate_ai_answer(
     Ok(())
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct MarkStaleRequest {
     pub reason: Option<String>,
 }
 
+#[utoipa::path(post, path = "/answers/{id}/mark-stale", request_body = MarkStaleRequest, responses((status = 200, body = AnswerResponse)), tag = "answers")]
 pub async fn mark_stale(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -296,12 +301,12 @@ pub async fn mark_stale(
     }))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct DigDeeperRequest {
     pub prompt: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct DigDeeperResponse {
     pub id: Uuid,
     pub answer_id: Uuid,
@@ -310,6 +315,7 @@ pub struct DigDeeperResponse {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
+#[utoipa::path(post, path = "/answers/{id}/dig-deeper", request_body = DigDeeperRequest, responses((status = 201, body = DigDeeperResponse)), tag = "answers")]
 pub async fn dig_deeper(
     State(state): State<AppState>,
     Path(answer_id): Path<Uuid>,
@@ -399,6 +405,7 @@ pub async fn dig_deeper(
     ))
 }
 
+#[utoipa::path(get, path = "/answers/{id}/deep-dives", responses((status = 200, body = Vec<DigDeeperResponse>)), tag = "answers")]
 pub async fn get_deep_dives(
     State(state): State<AppState>,
     Path(answer_id): Path<Uuid>,

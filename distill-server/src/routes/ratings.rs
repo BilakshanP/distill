@@ -4,11 +4,12 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::{auth::middleware::AuthUser, AppState};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct CreateRatingRequest {
     pub score: i32,
     pub comment: Option<String>,
@@ -17,7 +18,7 @@ pub struct CreateRatingRequest {
     pub rater_original_query: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct RatingResponse {
     pub id: Uuid,
     pub answer_id: Uuid,
@@ -30,6 +31,7 @@ pub struct RatingResponse {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
+#[utoipa::path(post, path = "/answers/{id}/ratings", request_body = CreateRatingRequest, responses((status = 201, body = RatingResponse)), tag = "ratings")]
 pub async fn create_rating(
     State(state): State<AppState>,
     Path(answer_id): Path<Uuid>,
@@ -70,6 +72,7 @@ pub async fn create_rating(
     ))
 }
 
+#[utoipa::path(put, path = "/answers/{id}/ratings/redact", responses((status = 204)), tag = "ratings")]
 pub async fn redact_rating(
     State(state): State<AppState>,
     Path(answer_id): Path<Uuid>,
@@ -90,6 +93,7 @@ pub async fn redact_rating(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(get, path = "/answers/{id}/ratings", responses((status = 200)), tag = "ratings")]
 pub async fn get_ratings(
     State(state): State<AppState>,
     Path(answer_id): Path<Uuid>,

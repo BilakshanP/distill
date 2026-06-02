@@ -56,6 +56,14 @@ Server starts at `http://localhost:3000`.
 cargo test -p distill-server
 ```
 
+### Swagger UI
+
+```bash
+cargo run -p distill-server --features swagger
+```
+
+Visit `http://localhost:3000/swagger-ui` for interactive API documentation.
+
 ## API Endpoints
 
 | Method | Endpoint | Auth | Description |

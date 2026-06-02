@@ -4,11 +4,12 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::{auth::middleware::AuthUser, AppState};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct CreateQuestionRequest {
     pub title: String,
     pub body: String,
@@ -22,7 +23,7 @@ fn default_metadata() -> serde_json::Value {
     serde_json::json!({})
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct QuestionResponse {
     pub id: Uuid,
     pub author_id: Uuid,
@@ -36,6 +37,7 @@ pub struct QuestionResponse {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
+#[utoipa::path(post, path = "/questions", request_body = CreateQuestionRequest, responses((status = 201, body = QuestionResponse)), tag = "questions")]
 pub async fn create_question(
     State(state): State<AppState>,
     auth: AuthUser,
@@ -131,18 +133,19 @@ pub async fn create_question(
     ))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct PreviewRequest {
     pub title: String,
     pub body: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct PreviewResponse {
     pub matches: Vec<SearchResult>,
     pub rephrased: Option<String>,
 }
 
+#[utoipa::path(post, path = "/questions/preview", request_body = PreviewRequest, responses((status = 200, body = PreviewResponse)), tag = "questions")]
 pub async fn preview_question(
     State(state): State<AppState>,
     _auth: AuthUser,
@@ -278,7 +281,7 @@ fn default_limit() -> i64 {
     20
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct SearchResult {
     pub id: Uuid,
     pub title: String,
@@ -288,6 +291,7 @@ pub struct SearchResult {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
+#[utoipa::path(get, path = "/questions/search", params(("q" = String, Query, description = "Search query")), responses((status = 200, body = Vec<SearchResult>)), tag = "questions")]
 pub async fn search_questions(
     State(state): State<AppState>,
     Query(params): Query<SearchParams>,
@@ -397,6 +401,7 @@ pub async fn search_questions(
     ))
 }
 
+#[utoipa::path(get, path = "/questions/{id}", responses((status = 200, body = QuestionResponse)), tag = "questions")]
 pub async fn get_question(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
