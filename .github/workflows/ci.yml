@@ -47,7 +47,7 @@ jobs:
     - name: Run tests
       env:
         DATABASE_URL: postgres://distill:distill@localhost:5432/distill
-      run: cargo test -p distill-server
+      run: cargo test --workspace
 
     - name: Check release builds
       run: cargo check --release
