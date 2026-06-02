@@ -27,12 +27,13 @@ Endpoints marked **Admin** require the user to have `role=admin`.
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/questions` | Yes | Create a question |
+| GET | `/questions` | No | List all questions (paginated) |
 | GET | `/questions/:id` | No | Get a question |
 | GET | `/questions/search?q=&tags=&limit=&offset=` | No | Hybrid search (BM25 + vector + RRF), optional tag filter |
 | POST | `/questions/preview` | Yes | Preview matches + LLM-rephrased query |
 | POST | `/questions/:id/link` | Yes | Manually link two questions |
 | POST | `/questions/:id/comments` | Yes | Comment on a question |
-| GET | `/questions/:id/comments` | No | Get question comments |
+| GET | `/questions/:id/comments` | No | Get question comments (paginated) |
 
 ### Answers
 
@@ -40,12 +41,12 @@ Endpoints marked **Admin** require the user to have `role=admin`.
 |--------|------|------|-------------|
 | GET | `/questions/:id/answers` | No | Get answers for a question |
 | PUT | `/answers/:id` | Yes | Edit an answer (stores unified diff) |
-| GET | `/answers/:id/history` | No | Edit history with diffs |
-| POST | `/answers/:id/mark-stale` | Yes | Mark answer as stale/deprecated |
+| GET | `/answers/:id/history` | No | Edit history with diffs (paginated) |
+| POST | `/answers/:id/mark-stale` | Yes | Mark answer as stale/deprecated (triggers auto-resolve if configured) |
 | POST | `/answers/:id/dig-deeper` | Yes | Ask LLM to elaborate |
-| GET | `/answers/:id/deep-dives` | No | Get all deep dives |
+| GET | `/answers/:id/deep-dives` | No | Get all deep dives (paginated) |
 | POST | `/answers/:id/comments` | Yes | Comment on an answer |
-| GET | `/answers/:id/comments` | No | Get answer comments |
+| GET | `/answers/:id/comments` | No | Get answer comments (paginated) |
 
 ### Ratings
 
@@ -111,4 +112,10 @@ Set via `PUT /admin/config`:
 | `dig_deeper_enabled` | `true`, `false` | Dig deeper feature |
 | `auto_contradiction_detection` | `true`, `false` | Auto-detect contradictions |
 | `llm_cache_ttl_hours` | integer | Cache TTL for LLM responses |
-| `stale_auto_resolve` | `true`, `false` | Auto-resolve stale answers |
+| `llm_retry_attempts` | integer | Max retries on transient LLM errors (503/429) |
+| `stale_auto_resolve` | `true`, `false` | Auto-generate updated answer when marked stale |
+| `token_budget_monthly` | integer or empty | Monthly token budget (empty = unlimited) |
+
+## Rate Limiting
+
+The server enforces rate limiting at 60 requests/minute per IP address. Exceeding this returns `429 Too Many Requests`.

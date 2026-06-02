@@ -277,3 +277,117 @@ async fn test_admin_config() {
         .await;
     resp.assert_status_ok();
 }
+
+#[tokio::test]
+async fn test_list_questions_paginated() {
+    let server = setup().await;
+    let (_uid, token) = create_test_user().await;
+
+    // Create 3 questions
+    for i in 0..3 {
+        server
+            .post("/questions")
+            .authorization_bearer(&token)
+            .json(&serde_json::json!({"title": format!("Q{}", i), "body": "body"}))
+            .await;
+    }
+
+    // List with limit=2
+    let resp = server.get("/questions?limit=2").await;
+    resp.assert_status_ok();
+    let body: serde_json::Value = resp.json();
+    assert_eq!(body["data"].as_array().unwrap().len(), 2);
+    assert_eq!(body["has_more"], true);
+    assert!(body["next_cursor"].is_string());
+
+    // Fetch next page — should have remaining items
+    let cursor = body["next_cursor"].as_str().unwrap();
+    let resp = server
+        .get(&format!("/questions?limit=2&after={}", cursor))
+        .await;
+    resp.assert_status_ok();
+    let body: serde_json::Value = resp.json();
+    assert!(!body["data"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn test_config_driven_answer_mode() {
+    let server = setup().await;
+    let (_uid, token) = create_admin_user().await;
+
+    // Set answer_mode to community-only
+    server
+        .put("/admin/config")
+        .authorization_bearer(&token)
+        .json(&serde_json::json!({"config": {"answer_mode": "community-only"}}))
+        .await;
+
+    // Create a question — should NOT trigger AI answer
+    let resp = server
+        .post("/questions")
+        .authorization_bearer(&token)
+        .json(&serde_json::json!({"title": "No AI", "body": "test"}))
+        .await;
+    let q_id = resp.json::<serde_json::Value>()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+    let resp = server.get(&format!("/questions/{}/answers", q_id)).await;
+    resp.assert_status_ok();
+    let answers: Vec<serde_json::Value> = resp.json();
+    assert!(answers.is_empty()); // No AI answer generated
+}
+
+#[tokio::test]
+async fn test_mark_stale() {
+    let server = setup().await;
+    let (uid, token) = create_test_user().await;
+    let db = get_db().await;
+
+    let q_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO questions (id, author_id, title, body, original_query) VALUES ($1, $2, 'Q', 'B', 'Q B')")
+        .bind(q_id).bind(uid).execute(&db).await.unwrap();
+    let a_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO answers (id, question_id, author_type, body) VALUES ($1, $2, 'human', 'old answer')")
+        .bind(a_id).bind(q_id).execute(&db).await.unwrap();
+
+    let resp = server
+        .post(&format!("/answers/{}/mark-stale", a_id))
+        .authorization_bearer(&token)
+        .json(&serde_json::json!({"reason": "outdated for v3"}))
+        .await;
+    resp.assert_status_ok();
+    let body: serde_json::Value = resp.json();
+    assert_eq!(body["is_stale"], true);
+}
+
+#[tokio::test]
+async fn test_comments_paginated() {
+    let server = setup().await;
+    let (uid, token) = create_test_user().await;
+    let db = get_db().await;
+
+    let q_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO questions (id, author_id, title, body, original_query) VALUES ($1, $2, 'Q', 'B', 'Q B')")
+        .bind(q_id).bind(uid).execute(&db).await.unwrap();
+
+    // Add 3 comments
+    for i in 0..3 {
+        server
+            .post(&format!("/questions/{}/comments", q_id))
+            .authorization_bearer(&token)
+            .json(&serde_json::json!({"body": format!("comment {}", i)}))
+            .await;
+    }
+
+    let resp = server
+        .get(&format!("/questions/{}/comments?limit=2", q_id))
+        .await;
+    resp.assert_status_ok();
+    let body: serde_json::Value = resp.json();
+    assert_eq!(body["data"].as_array().unwrap().len(), 2);
+    assert_eq!(body["has_more"], true);
+}
