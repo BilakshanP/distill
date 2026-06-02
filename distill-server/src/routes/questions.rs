@@ -182,22 +182,34 @@ pub async fn preview_question(
         .unwrap_or_default()
     };
 
-    // Rephrase via LLM
+    // Rephrase via LLM (with cache)
     let rephrased = if let Some(model) = &state.llm_chat_model {
-        use genai::chat::{ChatMessage, ChatRequest};
-        let client = genai::Client::default();
-        let chat_req = ChatRequest::new(vec![
-            ChatMessage::system("You are a helpful assistant that rephrases questions to be clearer and more searchable. Return ONLY the rephrased question, nothing else."),
-            ChatMessage::user(format!("Rephrase this question:\nTitle: {}\nBody: {}", req.title, req.body)),
-        ]);
-        match client.exec_chat(model.as_str(), chat_req, None).await {
-            Ok(resp) => {
-                tracing::debug!("rephrase response: {:?}", resp);
-                resp.first_text().map(|s| s.to_string())
-            }
-            Err(e) => {
-                tracing::warn!("rephrase failed: {}", e);
-                None
+        let cache_input = format!("{}:{}", req.title, req.body);
+        let key = crate::routes::llm_cache::cache_key("rephrase", &cache_input);
+
+        if let Some(cached) = crate::routes::llm_cache::get_cached(&state.db, &key).await {
+            Some(cached)
+        } else {
+            use genai::chat::{ChatMessage, ChatRequest};
+            let client = genai::Client::default();
+            let chat_req = ChatRequest::new(vec![
+                ChatMessage::system("You are a helpful assistant that rephrases questions to be clearer and more searchable. Return ONLY the rephrased question, nothing else."),
+                ChatMessage::user(format!("Rephrase this question:\nTitle: {}\nBody: {}", req.title, req.body)),
+            ]);
+            match client.exec_chat(model.as_str(), chat_req, None).await {
+                Ok(resp) => {
+                    let text = resp.first_text().map(|s| s.to_string());
+                    if let Some(ref t) = text {
+                        let config = crate::routes::get_config_map(&state.db).await;
+                        let ttl: i64 = config.get("llm_cache_ttl_hours").and_then(|v| v.parse().ok()).unwrap_or(168);
+                        crate::routes::llm_cache::store_cache(&state.db, &key, "rephrase", t, ttl).await;
+                    }
+                    text
+                }
+                Err(e) => {
+                    tracing::warn!("rephrase failed: {}", e);
+                    None
+                }
             }
         }
     } else {

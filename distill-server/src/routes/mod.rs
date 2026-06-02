@@ -2,6 +2,7 @@ pub mod admin;
 pub mod answers;
 pub mod contradictions;
 pub mod graph;
+pub mod llm_cache;
 pub mod questions;
 pub mod ratings;
 
