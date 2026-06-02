@@ -1,10 +1,13 @@
 pub mod admin;
 pub mod answers;
+pub mod comments;
 pub mod contradictions;
 pub mod graph;
+pub mod links;
 pub mod llm_cache;
 pub mod questions;
 pub mod ratings;
+pub mod tags;
 
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;

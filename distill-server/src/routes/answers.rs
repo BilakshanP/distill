@@ -354,13 +354,29 @@ pub async fn dig_deeper(
                 StatusCode::INTERNAL_SERVER_ERROR
             })?;
 
+    // Gather comments for context
+    let comments = sqlx::query_as::<_, (String,)>(
+        "SELECT body FROM comments WHERE answer_id = $1 ORDER BY created_at ASC LIMIT 20",
+    )
+    .bind(answer_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let comments_ctx = if comments.is_empty() {
+        String::new()
+    } else {
+        let c: Vec<_> = comments.iter().map(|r| r.0.as_str()).collect();
+        format!("\n\nComments/discussion:\n{}", c.join("\n---\n"))
+    };
+
     use genai::chat::{ChatMessage, ChatRequest};
     let client = genai::Client::default();
     let chat_req = ChatRequest::new(vec![
-        ChatMessage::system("You are a knowledgeable assistant. The user wants to explore an answer in more depth. Provide a detailed, helpful response."),
+        ChatMessage::system("You are a knowledgeable assistant. The user wants to explore an answer in more depth. Consider the comments/discussion context as well. Provide a detailed, helpful response."),
         ChatMessage::user(format!(
-            "Original question: {} - {}\n\nCurrent answer:\n{}\n\nUser's follow-up:\n{}",
-            question_row.0, question_row.1, answer_row.0, req.prompt
+            "Original question: {} - {}\n\nCurrent answer:\n{}{}\n\nUser's follow-up:\n{}",
+            question_row.0, question_row.1, answer_row.0, comments_ctx, req.prompt
         )),
     ]);
 

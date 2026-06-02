@@ -191,6 +191,21 @@ pub fn build_router(state: AppState) -> Router {
             "/graph/node/{id}",
             get(routes::graph::get_node_neighborhood),
         )
+        .route("/tags", get(routes::tags::list_tags))
+        .route(
+            "/questions/{id}/link",
+            axum::routing::post(routes::links::link_questions),
+        )
+        .route(
+            "/questions/{id}/comments",
+            axum::routing::post(routes::comments::create_question_comment)
+                .get(routes::comments::get_question_comments),
+        )
+        .route(
+            "/answers/{id}/comments",
+            axum::routing::post(routes::comments::create_answer_comment)
+                .get(routes::comments::get_answer_comments),
+        )
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 

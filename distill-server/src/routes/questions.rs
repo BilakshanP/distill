@@ -275,6 +275,8 @@ pub struct SearchParams {
     pub limit: i64,
     #[serde(default)]
     pub offset: i64,
+    /// Comma-separated tags to filter by
+    pub tags: Option<String>,
 }
 
 fn default_limit() -> i64 {
@@ -366,20 +368,44 @@ pub async fn search_questions(
         })?
     } else {
         // Keyword-only fallback
-        sqlx::query_as::<_, (Uuid, String, String, Vec<String>, f64, chrono::DateTime<chrono::Utc>)>(
-            r#"
-            SELECT id, title, body, tags, ts_rank(tsv, websearch_to_tsquery('english', $1))::float8 AS score, created_at
-            FROM questions
-            WHERE tsv @@ websearch_to_tsquery('english', $1)
-            ORDER BY score DESC
-            LIMIT $2 OFFSET $3
-            "#,
-        )
-        .bind(&params.q)
-        .bind(limit)
-        .bind(params.offset)
-        .fetch_all(&state.db)
-        .await
+        let tag_filter: Vec<String> = params
+            .tags
+            .as_deref()
+            .map(|t| t.split(',').map(|s| s.trim().to_string()).collect())
+            .unwrap_or_default();
+
+        if tag_filter.is_empty() {
+            sqlx::query_as::<_, (Uuid, String, String, Vec<String>, f64, chrono::DateTime<chrono::Utc>)>(
+                r#"
+                SELECT id, title, body, tags, ts_rank(tsv, websearch_to_tsquery('english', $1))::float8 AS score, created_at
+                FROM questions
+                WHERE tsv @@ websearch_to_tsquery('english', $1)
+                ORDER BY score DESC
+                LIMIT $2 OFFSET $3
+                "#,
+            )
+            .bind(&params.q)
+            .bind(limit)
+            .bind(params.offset)
+            .fetch_all(&state.db)
+            .await
+        } else {
+            sqlx::query_as::<_, (Uuid, String, String, Vec<String>, f64, chrono::DateTime<chrono::Utc>)>(
+                r#"
+                SELECT id, title, body, tags, ts_rank(tsv, websearch_to_tsquery('english', $1))::float8 AS score, created_at
+                FROM questions
+                WHERE tsv @@ websearch_to_tsquery('english', $1) AND tags @> $4
+                ORDER BY score DESC
+                LIMIT $2 OFFSET $3
+                "#,
+            )
+            .bind(&params.q)
+            .bind(limit)
+            .bind(params.offset)
+            .bind(&tag_filter)
+            .fetch_all(&state.db)
+            .await
+        }
         .map_err(|e| {
             tracing::error!("keyword search failed: {:?}", e);
             StatusCode::INTERNAL_SERVER_ERROR
