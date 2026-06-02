@@ -14,8 +14,12 @@ pub struct CreateQuestionRequest {
     pub body: String,
     #[serde(default)]
     pub tags: Vec<String>,
-    #[serde(default)]
+    #[serde(default = "default_metadata")]
     pub metadata: serde_json::Value,
+}
+
+fn default_metadata() -> serde_json::Value {
+    serde_json::json!({})
 }
 
 #[derive(Serialize)]
@@ -52,7 +56,10 @@ pub async fn create_question(
     .bind(&req.metadata)
     .fetch_one(&state.db)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .map_err(|e| {
+        tracing::error!("failed to insert question: {:?}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     // Optionally generate embedding in background
     if let Some(model) = &state.llm_embedding_model {
