@@ -2,7 +2,6 @@ use axum::{
     extract::FromRequestParts,
     http::{header::AUTHORIZATION, request::Parts, StatusCode},
 };
-use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::AppState;
