@@ -427,6 +427,59 @@ pub async fn search_questions(
     ))
 }
 
+#[utoipa::path(get, path = "/questions", responses((status = 200)), tag = "questions")]
+pub async fn list_questions(
+    State(state): State<AppState>,
+    Query(params): Query<crate::routes::CursorParams>,
+) -> Result<Json<crate::routes::Paginated<QuestionResponse>>, StatusCode> {
+    let limit = params.limit.min(100);
+    let fetch_limit = limit + 1;
+
+    let rows = if let Some(ref cursor) = params.after {
+        let (ts, cid) = crate::routes::decode_cursor(cursor).ok_or(StatusCode::BAD_REQUEST)?;
+        sqlx::query_as::<_, (Uuid, Uuid, String, String, String, Vec<String>, serde_json::Value, String, bool, chrono::DateTime<chrono::Utc>)>(
+            r#"SELECT id, author_id, title, body, original_query, tags, metadata, status, embedding IS NOT NULL, created_at
+               FROM questions WHERE (created_at, id) < ($1, $2)
+               ORDER BY created_at DESC, id DESC LIMIT $3"#,
+        )
+        .bind(ts).bind(cid).bind(fetch_limit)
+        .fetch_all(&state.db).await
+    } else {
+        sqlx::query_as::<_, (Uuid, Uuid, String, String, String, Vec<String>, serde_json::Value, String, bool, chrono::DateTime<chrono::Utc>)>(
+            r#"SELECT id, author_id, title, body, original_query, tags, metadata, status, embedding IS NOT NULL, created_at
+               FROM questions ORDER BY created_at DESC, id DESC LIMIT $1"#,
+        )
+        .bind(fetch_limit)
+        .fetch_all(&state.db).await
+    }.map_err(|e| { tracing::error!("list questions failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+
+    let has_more = rows.len() as i64 > limit;
+    let items: Vec<_> = rows.into_iter().take(limit as usize).collect();
+    let next_cursor = items
+        .last()
+        .map(|r| crate::routes::encode_cursor(&r.9, &r.0));
+
+    Ok(Json(crate::routes::Paginated {
+        data: items
+            .into_iter()
+            .map(|r| QuestionResponse {
+                id: r.0,
+                author_id: r.1,
+                title: r.2,
+                body: r.3,
+                original_query: r.4,
+                tags: r.5,
+                metadata: r.6,
+                status: r.7,
+                has_embedding: r.8,
+                created_at: r.9,
+            })
+            .collect(),
+        next_cursor: if has_more { next_cursor } else { None },
+        has_more,
+    }))
+}
+
 #[utoipa::path(get, path = "/questions/{id}", responses((status = 200, body = QuestionResponse)), tag = "questions")]
 pub async fn get_question(
     State(state): State<AppState>,

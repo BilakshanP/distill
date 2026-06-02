@@ -133,7 +133,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/me", get(me).delete(delete_me))
         .route(
             "/questions",
-            axum::routing::post(routes::questions::create_question),
+            axum::routing::post(routes::questions::create_question)
+                .get(routes::questions::list_questions),
         )
         .route(
             "/questions/search",
