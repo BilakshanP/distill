@@ -9,7 +9,8 @@ pub struct Config {
     pub github_client_id: String,
     pub github_client_secret: String,
     pub base_url: String,
-    pub llm_api_key: Option<String>,
+    pub llm_chat_model: Option<String>,
+    pub llm_embedding_model: Option<String>,
 }
 
 impl Config {
@@ -30,7 +31,8 @@ impl Config {
             github_client_secret: env::var("GITHUB_CLIENT_SECRET")
                 .expect("GITHUB_CLIENT_SECRET must be set"),
             base_url: env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:3000".into()),
-            llm_api_key: env::var("LLM_API_KEY").ok().filter(|s| !s.is_empty()),
+            llm_chat_model: env::var("LLM_CHAT_MODEL").ok().filter(|s| !s.is_empty()),
+            llm_embedding_model: env::var("LLM_EMBEDDING_MODEL").ok().filter(|s| !s.is_empty()),
         }
     }
 }

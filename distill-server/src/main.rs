@@ -19,7 +19,8 @@ pub struct AppState {
     pub github_client_id: String,
     pub github_client_secret: String,
     pub base_url: String,
-    pub llm_api_key: Option<String>,
+    pub llm_chat_model: Option<String>,
+    pub llm_embedding_model: Option<String>,
 }
 
 async fn health(State(state): State<AppState>) -> Result<Json<serde_json::Value>, StatusCode> {
@@ -79,11 +80,12 @@ async fn main() {
         github_client_id: cfg.github_client_id,
         github_client_secret: cfg.github_client_secret,
         base_url: cfg.base_url,
-        llm_api_key: cfg.llm_api_key.clone(),
+        llm_chat_model: cfg.llm_chat_model.clone(),
+        llm_embedding_model: cfg.llm_embedding_model.clone(),
     };
 
-    if cfg.llm_api_key.is_none() {
-        tracing::warn!("⚠️  LLM_API_KEY not set — AI features disabled (embeddings, rephrase, contradiction detection, dig deeper)");
+    if cfg.llm_chat_model.is_none() || cfg.llm_embedding_model.is_none() {
+        tracing::warn!("⚠️  LLM models not fully configured — AI features disabled (set LLM_CHAT_MODEL and LLM_EMBEDDING_MODEL)");
     }
 
     let app = Router::new()

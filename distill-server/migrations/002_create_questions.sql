@@ -5,7 +5,7 @@ CREATE TABLE questions (
     title TEXT NOT NULL,
     body TEXT NOT NULL,
     original_query TEXT NOT NULL,
-    embedding vector(1536),
+    embedding vector,
     tsv tsvector GENERATED ALWAYS AS (to_tsvector('english', title || ' ' || body)) STORED,
     tags TEXT[] NOT NULL DEFAULT '{}',
     metadata JSONB NOT NULL DEFAULT '{}',

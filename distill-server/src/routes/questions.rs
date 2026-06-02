@@ -55,14 +55,14 @@ pub async fn create_question(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Optionally generate embedding in background
-    if state.llm_api_key.is_some() {
+    if let Some(model) = &state.llm_embedding_model {
         let db = state.db.clone();
-        let api_key = state.llm_api_key.clone().unwrap();
+        let model = model.clone();
         let text = original_query.clone();
         let question_id = row.0;
 
         tokio::spawn(async move {
-            if let Err(e) = generate_embedding(&db, &api_key, question_id, &text).await {
+            if let Err(e) = generate_embedding(&db, &model, question_id, &text).await {
                 tracing::error!("embedding generation failed for {}: {}", question_id, e);
             }
         });
@@ -115,36 +115,16 @@ pub async fn get_question(
 
 async fn generate_embedding(
     db: &sqlx::PgPool,
-    api_key: &str,
+    model: &str,
     question_id: Uuid,
     text: &str,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use pgvector::Vector;
 
-    // Use reqwest directly against OpenAI-compatible embeddings endpoint
-    let client = reqwest::Client::new();
-    let resp = client
-        .post("https://api.openai.com/v1/embeddings")
-        .header("Authorization", format!("Bearer {}", api_key))
-        .json(&serde_json::json!({
-            "model": "text-embedding-3-small",
-            "input": text
-        }))
-        .send()
-        .await?
-        .json::<serde_json::Value>()
-        .await?;
+    let client = genai::Client::default();
+    let resp = client.embed(model, text, None).await?;
 
-    let embedding_data = resp["data"][0]["embedding"]
-        .as_array()
-        .ok_or("no embedding in response")?;
-
-    let embedding: Vec<f32> = embedding_data
-        .iter()
-        .map(|v| v.as_f64().unwrap_or(0.0) as f32)
-        .collect();
-
-    let vector = Vector::from(embedding);
+    let vector = Vector::from(resp.embeddings[0].vector.clone());
 
     sqlx::query("UPDATE questions SET embedding = $1 WHERE id = $2")
         .bind(vector)
