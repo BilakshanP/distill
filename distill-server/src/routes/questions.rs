@@ -75,6 +75,19 @@ pub async fn create_question(
         });
     }
 
+    // Generate AI answer in background
+    if let Some(chat_model) = &state.llm_chat_model {
+        let db = state.db.clone();
+        let chat_model = chat_model.clone();
+        let question_id = row.0;
+        let title = req.title.clone();
+        let body = req.body.clone();
+
+        tokio::spawn(async move {
+            crate::routes::answers::generate_ai_answer(&db, &chat_model, question_id, &title, &body).await;
+        });
+    }
+
     Ok((
         StatusCode::CREATED,
         Json(QuestionResponse {

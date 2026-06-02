@@ -98,6 +98,7 @@ async fn main() {
         .route("/questions/search", get(routes::questions::search_questions))
         .route("/questions/preview", axum::routing::post(routes::questions::preview_question))
         .route("/questions/{id}", get(routes::questions::get_question))
+        .route("/questions/{id}/answers", get(routes::answers::get_answers))
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
