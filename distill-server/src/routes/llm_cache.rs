@@ -34,6 +34,31 @@ pub async fn store_cache(db: &PgPool, key: &str, operation: &str, response: &str
     .await;
 }
 
+/// Check if the monthly token budget allows a new LLM call.
+/// Returns true if budget is unlimited or not yet exhausted.
+pub async fn check_budget(db: &PgPool, config: &std::collections::HashMap<String, String>) -> bool {
+    let budget_str = config
+        .get("token_budget_monthly")
+        .map(|s| s.as_str())
+        .unwrap_or("");
+    if budget_str.is_empty() {
+        return true; // unlimited
+    }
+    let budget: i64 = match budget_str.parse() {
+        Ok(v) => v,
+        Err(_) => return true,
+    };
+
+    let used: (i64,) = sqlx::query_as(
+        "SELECT COALESCE(SUM(LENGTH(response)), 0) FROM llm_cache WHERE created_at >= date_trunc('month', now())"
+    )
+    .fetch_one(db)
+    .await
+    .unwrap_or((0,));
+
+    used.0 < budget
+}
+
 /// Retry an async LLM call up to `max_retries` times on transient errors.
 pub async fn retry_llm<F, Fut, T, E>(max_retries: u32, mut f: F) -> Result<T, E>
 where

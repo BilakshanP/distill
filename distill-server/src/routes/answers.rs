@@ -380,7 +380,9 @@ pub async fn dig_deeper(
     Json(req): Json<DigDeeperRequest>,
 ) -> Result<(StatusCode, Json<DigDeeperResponse>), StatusCode> {
     let config = crate::routes::get_config_map(&state.db).await;
-    if !crate::routes::is_llm_feature_enabled(&config, "dig_deeper_enabled") {
+    if !crate::routes::is_llm_feature_enabled(&config, "dig_deeper_enabled")
+        || !crate::routes::llm_cache::check_budget(&state.db, &config).await
+    {
         return Err(StatusCode::SERVICE_UNAVAILABLE);
     }
 

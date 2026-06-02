@@ -96,7 +96,9 @@ pub async fn create_question(
             .get("answer_mode")
             .map(|s| s.as_str())
             .unwrap_or("ai-first");
-        if answer_mode != "community-only" {
+        if answer_mode != "community-only"
+            && crate::routes::llm_cache::check_budget(&state.db, &config).await
+        {
             let db = state.db.clone();
             let chat_model = chat_model.clone();
             let question_id = row.0;
@@ -210,7 +212,9 @@ pub async fn preview_question(
     // Rephrase via LLM (with cache)
     let rephrased = if let Some(model) = &state.llm_chat_model {
         let config = crate::routes::get_config_map(&state.db).await;
-        if !crate::routes::is_llm_feature_enabled(&config, "rephrase_enabled") {
+        if !crate::routes::is_llm_feature_enabled(&config, "rephrase_enabled")
+            || !crate::routes::llm_cache::check_budget(&state.db, &config).await
+        {
             None
         } else {
             let cache_input = format!("{}:{}", req.title, req.body);
