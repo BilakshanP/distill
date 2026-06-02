@@ -186,7 +186,8 @@ async fn test_ratings() {
 
     let resp = server.get(&format!("/answers/{}/ratings", a_id)).await;
     resp.assert_status_ok();
-    let ratings: Vec<serde_json::Value> = resp.json();
+    let body: serde_json::Value = resp.json();
+    let ratings = body["data"].as_array().unwrap();
     assert_eq!(ratings[0]["score"], 5);
 }
 
@@ -219,6 +220,8 @@ async fn test_contradiction_flag() {
         .authorization_bearer(&admin_token)
         .await;
     resp.assert_status_ok();
+    let body: serde_json::Value = resp.json();
+    assert!(body["data"].as_array().unwrap().iter().any(|c| c["explanation"] == "opposite"));
 }
 
 #[tokio::test]

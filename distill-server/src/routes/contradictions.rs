@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     Json,
 };
@@ -74,20 +74,46 @@ pub async fn get_contradictions_for_answer(
 pub async fn admin_review_queue(
     State(state): State<AppState>,
     _auth: crate::auth::middleware::AdminUser,
-) -> Result<Json<Vec<ContradictionResponse>>, StatusCode> {
-    let rows = sqlx::query_as::<_, (Uuid, Uuid, Uuid, String, String, Option<Uuid>, String, chrono::DateTime<chrono::Utc>)>(
-        r#"SELECT id, answer_id_a, answer_id_b, explanation, source, flagged_by, status, detected_at
-           FROM contradiction_flags WHERE status = 'pending'
-           ORDER BY detected_at ASC"#,
-    )
-    .fetch_all(&state.db)
-    .await
-    .map_err(|e| { tracing::error!("admin queue failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+    Query(params): Query<crate::routes::CursorParams>,
+) -> Result<Json<crate::routes::Paginated<ContradictionResponse>>, StatusCode> {
+    let limit = params.limit.min(100);
+    let fetch_limit = limit + 1;
 
-    Ok(Json(rows.into_iter().map(|r| ContradictionResponse {
-        id: r.0, answer_id_a: r.1, answer_id_b: r.2, explanation: r.3,
-        source: r.4, flagged_by: r.5, status: r.6, detected_at: r.7,
-    }).collect()))
+    let rows = if let Some(ref cursor) = params.after {
+        let (ts, cid) = crate::routes::decode_cursor(cursor).ok_or(StatusCode::BAD_REQUEST)?;
+        sqlx::query_as::<_, (Uuid, Uuid, Uuid, String, String, Option<Uuid>, String, chrono::DateTime<chrono::Utc>)>(
+            r#"SELECT id, answer_id_a, answer_id_b, explanation, source, flagged_by, status, detected_at
+               FROM contradiction_flags WHERE status = 'pending' AND (detected_at, id) > ($1, $2)
+               ORDER BY detected_at ASC, id ASC LIMIT $3"#,
+        )
+        .bind(ts).bind(cid).bind(fetch_limit)
+        .fetch_all(&state.db).await
+    } else {
+        sqlx::query_as::<_, (Uuid, Uuid, Uuid, String, String, Option<Uuid>, String, chrono::DateTime<chrono::Utc>)>(
+            r#"SELECT id, answer_id_a, answer_id_b, explanation, source, flagged_by, status, detected_at
+               FROM contradiction_flags WHERE status = 'pending'
+               ORDER BY detected_at ASC, id ASC LIMIT $1"#,
+        )
+        .bind(fetch_limit)
+        .fetch_all(&state.db).await
+    }.map_err(|e| { tracing::error!("admin queue failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+
+    let has_more = rows.len() as i64 > limit;
+    let items: Vec<_> = rows.into_iter().take(limit as usize).collect();
+    let next_cursor = if has_more {
+        items.last().map(|r| crate::routes::encode_cursor(&r.7, &r.0))
+    } else {
+        None
+    };
+
+    Ok(Json(crate::routes::Paginated {
+        data: items.into_iter().map(|r| ContradictionResponse {
+            id: r.0, answer_id_a: r.1, answer_id_b: r.2, explanation: r.3,
+            source: r.4, flagged_by: r.5, status: r.6, detected_at: r.7,
+        }).collect(),
+        next_cursor,
+        has_more,
+    }))
 }
 
 /// Auto-detect contradictions for a newly created answer

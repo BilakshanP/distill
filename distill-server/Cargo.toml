@@ -22,6 +22,7 @@ dotenvy = "0.15"
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 diffy-imara = "0.3"
+base64 = "0.22"
 
 [dev-dependencies]
 axum-test = "20"

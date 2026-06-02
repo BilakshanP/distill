@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     Json,
 };
@@ -64,18 +64,41 @@ pub async fn create_rating(
 pub async fn get_ratings(
     State(state): State<AppState>,
     Path(answer_id): Path<Uuid>,
-) -> Result<Json<Vec<RatingResponse>>, StatusCode> {
-    let rows = sqlx::query_as::<_, (Uuid, Uuid, Uuid, i32, String, Option<String>, Vec<String>, Option<String>, chrono::DateTime<chrono::Utc>)>(
-        "SELECT id, answer_id, rater_id, score, scale_type, comment, tags, rater_original_query, created_at FROM ratings WHERE answer_id = $1 ORDER BY created_at DESC"
-    )
-    .bind(answer_id)
-    .fetch_all(&state.db)
-    .await
-    .map_err(|e| { tracing::error!("ratings fetch failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+    Query(params): Query<crate::routes::CursorParams>,
+) -> Result<Json<crate::routes::Paginated<RatingResponse>>, StatusCode> {
+    let limit = params.limit.min(100);
+    let fetch_limit = limit + 1; // fetch one extra to detect has_more
 
-    Ok(Json(rows.into_iter().map(|r| RatingResponse {
-        id: r.0, answer_id: r.1, rater_id: r.2, score: r.3,
-        scale_type: r.4, comment: r.5, tags: r.6,
-        rater_original_query: r.7, created_at: r.8,
-    }).collect()))
+    let rows = if let Some(ref cursor) = params.after {
+        let (ts, cid) = crate::routes::decode_cursor(cursor).ok_or(StatusCode::BAD_REQUEST)?;
+        sqlx::query_as::<_, (Uuid, Uuid, Uuid, i32, String, Option<String>, Vec<String>, Option<String>, chrono::DateTime<chrono::Utc>)>(
+            "SELECT id, answer_id, rater_id, score, scale_type, comment, tags, rater_original_query, created_at FROM ratings WHERE answer_id = $1 AND (created_at, id) < ($2, $3) ORDER BY created_at DESC, id DESC LIMIT $4"
+        )
+        .bind(answer_id).bind(ts).bind(cid).bind(fetch_limit)
+        .fetch_all(&state.db).await
+    } else {
+        sqlx::query_as::<_, (Uuid, Uuid, Uuid, i32, String, Option<String>, Vec<String>, Option<String>, chrono::DateTime<chrono::Utc>)>(
+            "SELECT id, answer_id, rater_id, score, scale_type, comment, tags, rater_original_query, created_at FROM ratings WHERE answer_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2"
+        )
+        .bind(answer_id).bind(fetch_limit)
+        .fetch_all(&state.db).await
+    }.map_err(|e| { tracing::error!("ratings fetch failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+
+    let has_more = rows.len() as i64 > limit;
+    let items: Vec<_> = rows.into_iter().take(limit as usize).collect();
+    let next_cursor = if has_more {
+        items.last().map(|r| crate::routes::encode_cursor(&r.8, &r.0))
+    } else {
+        None
+    };
+
+    Ok(Json(crate::routes::Paginated {
+        data: items.into_iter().map(|r| RatingResponse {
+            id: r.0, answer_id: r.1, rater_id: r.2, score: r.3,
+            scale_type: r.4, comment: r.5, tags: r.6,
+            rater_original_query: r.7, created_at: r.8,
+        }).collect(),
+        next_cursor,
+        has_more,
+    }))
 }
