@@ -1,5 +1,6 @@
 mod auth;
 mod config;
+mod routes;
 
 use axum::{extract::State, http::StatusCode, routing::get, Json, Router};
 use sqlx::postgres::PgPoolOptions;
@@ -18,6 +19,7 @@ pub struct AppState {
     pub github_client_id: String,
     pub github_client_secret: String,
     pub base_url: String,
+    pub llm_api_key: Option<String>,
 }
 
 async fn health(State(state): State<AppState>) -> Result<Json<serde_json::Value>, StatusCode> {
@@ -77,6 +79,7 @@ async fn main() {
         github_client_id: cfg.github_client_id,
         github_client_secret: cfg.github_client_secret,
         base_url: cfg.base_url,
+        llm_api_key: cfg.llm_api_key,
     };
 
     let app = Router::new()
@@ -84,6 +87,8 @@ async fn main() {
         .route("/auth/github", get(auth::oauth::github_login))
         .route("/auth/github/callback", get(auth::oauth::github_callback))
         .route("/me", get(me))
+        .route("/questions", axum::routing::post(routes::questions::create_question))
+        .route("/questions/{id}", get(routes::questions::get_question))
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
