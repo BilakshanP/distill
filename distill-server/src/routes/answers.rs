@@ -211,3 +211,96 @@ async fn do_generate_ai_answer(
 
     Ok(())
 }
+
+#[derive(Deserialize)]
+pub struct DigDeeperRequest {
+    pub prompt: String,
+}
+
+#[derive(Serialize)]
+pub struct DigDeeperResponse {
+    pub id: Uuid,
+    pub answer_id: Uuid,
+    pub prompt: String,
+    pub response: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub async fn dig_deeper(
+    State(state): State<AppState>,
+    Path(answer_id): Path<Uuid>,
+    auth: AuthUser,
+    Json(req): Json<DigDeeperRequest>,
+) -> Result<(StatusCode, Json<DigDeeperResponse>), StatusCode> {
+    let chat_model = state.llm_chat_model.as_deref()
+        .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+
+    // Get the answer and its question
+    let answer_row = sqlx::query_as::<_, (String, Uuid)>(
+        "SELECT body, question_id FROM answers WHERE id = $1"
+    )
+    .bind(answer_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|e| { tracing::error!("dig deeper fetch failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?
+    .ok_or(StatusCode::NOT_FOUND)?;
+
+    let question_row = sqlx::query_as::<_, (String, String)>(
+        "SELECT title, body FROM questions WHERE id = $1"
+    )
+    .bind(answer_row.1)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| { tracing::error!("dig deeper question fetch failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+
+    use genai::chat::{ChatMessage, ChatRequest};
+    let client = genai::Client::default();
+    let chat_req = ChatRequest::new(vec![
+        ChatMessage::system("You are a knowledgeable assistant. The user wants to explore an answer in more depth. Provide a detailed, helpful response."),
+        ChatMessage::user(format!(
+            "Original question: {} - {}\n\nCurrent answer:\n{}\n\nUser's follow-up:\n{}",
+            question_row.0, question_row.1, answer_row.0, req.prompt
+        )),
+    ]);
+
+    let resp = client.exec_chat(chat_model, chat_req, None).await
+        .map_err(|e| { tracing::error!("dig deeper LLM failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+
+    let response_text = resp.first_text()
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?
+        .to_string();
+
+    let row = sqlx::query_as::<_, (Uuid, Uuid, String, String, chrono::DateTime<chrono::Utc>)>(
+        r#"INSERT INTO deep_dives (answer_id, requester_id, prompt, response, context_sources)
+           VALUES ($1, $2, $3, $4, '[]')
+           RETURNING id, answer_id, prompt, response, created_at"#,
+    )
+    .bind(answer_id)
+    .bind(auth.user_id)
+    .bind(&req.prompt)
+    .bind(&response_text)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| { tracing::error!("dig deeper insert failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+
+    Ok((StatusCode::CREATED, Json(DigDeeperResponse {
+        id: row.0, answer_id: row.1, prompt: row.2, response: row.3, created_at: row.4,
+    })))
+}
+
+pub async fn get_deep_dives(
+    State(state): State<AppState>,
+    Path(answer_id): Path<Uuid>,
+) -> Result<Json<Vec<DigDeeperResponse>>, StatusCode> {
+    let rows = sqlx::query_as::<_, (Uuid, Uuid, String, String, chrono::DateTime<chrono::Utc>)>(
+        "SELECT id, answer_id, prompt, response, created_at FROM deep_dives WHERE answer_id = $1 ORDER BY created_at ASC"
+    )
+    .bind(answer_id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| { tracing::error!("get deep dives failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+
+    Ok(Json(rows.into_iter().map(|r| DigDeeperResponse {
+        id: r.0, answer_id: r.1, prompt: r.2, response: r.3, created_at: r.4,
+    }).collect()))
+}

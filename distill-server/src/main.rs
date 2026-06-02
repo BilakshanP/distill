@@ -101,6 +101,8 @@ async fn main() {
         .route("/questions/{id}/answers", get(routes::answers::get_answers))
         .route("/answers/{id}", axum::routing::put(routes::answers::edit_answer))
         .route("/answers/{id}/history", get(routes::answers::get_history))
+        .route("/answers/{id}/dig-deeper", axum::routing::post(routes::answers::dig_deeper))
+        .route("/answers/{id}/deep-dives", get(routes::answers::get_deep_dives))
         .route("/answers/{id}/ratings", axum::routing::post(routes::ratings::create_rating).get(routes::ratings::get_ratings))
         .route("/answers/{id}/flag-contradiction", axum::routing::post(routes::contradictions::flag_contradiction))
         .route("/answers/{id}/contradictions", get(routes::contradictions::get_contradictions_for_answer))
