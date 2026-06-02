@@ -114,8 +114,13 @@ pub async fn preview_question(
     // Find matching questions using hybrid search
     let query_embedding = if let Some(model) = &state.llm_embedding_model {
         let client = genai::Client::default();
-        client.embed(model.as_str(), &query, None).await.ok()
-            .map(|r| pgvector::Vector::from(r.embeddings[0].vector.clone()))
+        match client.embed(model.as_str(), &query, None).await {
+            Ok(r) => Some(pgvector::Vector::from(r.embeddings[0].vector.clone())),
+            Err(e) => {
+                tracing::error!("preview embedding failed: {:?}", e);
+                None
+            }
+        }
     } else {
         None
     };
@@ -133,7 +138,7 @@ pub async fn preview_question(
             ),
             rrf AS (
                 SELECT COALESCE(fts.id, vec.id) AS id,
-                       COALESCE(1.0 / (60.0 + fts.rn), 0.0) + COALESCE(1.0 / (60.0 + vec.rn), 0.0) AS score
+                       (COALESCE(1.0 / (60.0 + fts.rn), 0.0) + COALESCE(1.0 / (60.0 + vec.rn), 0.0))::float8 AS score
                 FROM fts FULL OUTER JOIN vec ON fts.id = vec.id
             )
             SELECT q.id, q.title, q.body, q.tags, rrf.score, q.created_at
@@ -145,6 +150,7 @@ pub async fn preview_question(
         .bind(embedding)
         .fetch_all(&state.db)
         .await
+        .map_err(|e| { tracing::error!("preview search query failed: {:?}", e); })
         .unwrap_or_default()
     } else {
         sqlx::query_as::<_, (Uuid, String, String, Vec<String>, f64, chrono::DateTime<chrono::Utc>)>(
@@ -155,6 +161,7 @@ pub async fn preview_question(
         .bind(&query)
         .fetch_all(&state.db)
         .await
+        .map_err(|e| { tracing::error!("preview keyword search failed: {:?}", e); })
         .unwrap_or_default()
     };
 
@@ -167,7 +174,10 @@ pub async fn preview_question(
             ChatMessage::user(format!("Rephrase this question:\nTitle: {}\nBody: {}", req.title, req.body)),
         ]);
         match client.exec_chat(model.as_str(), chat_req, None).await {
-            Ok(resp) => resp.first_text().map(|s| s.to_string()),
+            Ok(resp) => {
+                tracing::debug!("rephrase response: {:?}", resp);
+                resp.first_text().map(|s| s.to_string())
+            }
             Err(e) => {
                 tracing::warn!("rephrase failed: {}", e);
                 None
@@ -249,7 +259,7 @@ pub async fn search_questions(
             ),
             rrf AS (
                 SELECT COALESCE(fts.id, vec.id) AS id,
-                       COALESCE(1.0 / ($3 + fts.rn), 0.0) + COALESCE(1.0 / ($3 + vec.rn), 0.0) AS score
+                       (COALESCE(1.0 / ($3 + fts.rn), 0.0) + COALESCE(1.0 / ($3 + vec.rn), 0.0))::float8 AS score
                 FROM fts FULL OUTER JOIN vec ON fts.id = vec.id
             )
             SELECT q.id, q.title, q.body, q.tags, rrf.score, q.created_at

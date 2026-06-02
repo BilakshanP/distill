@@ -56,11 +56,12 @@ async fn me(
 
 #[tokio::main]
 async fn main() {
+    dotenvy::dotenv().ok();
+
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .init();
 
-    dotenvy::dotenv().ok();
     let cfg = config::Config::from_env();
 
     let db = PgPoolOptions::new()
