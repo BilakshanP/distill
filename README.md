@@ -64,6 +64,7 @@ cargo test -p distill-server
 | GET | `/auth/github` | No | Start OAuth flow |
 | GET | `/auth/github/callback` | No | OAuth callback (returns JWT) |
 | GET | `/me` | Yes | Current user profile |
+| DELETE | `/me` | Yes | Delete account (anonymizes contributions, scrubs PII) |
 | POST | `/questions` | Yes | Create a question |
 | GET | `/questions/:id` | No | Get a question |
 | GET | `/questions/search?q=` | No | Hybrid search (BM25 + vector + RRF) |
@@ -72,14 +73,16 @@ cargo test -p distill-server
 | PUT | `/answers/:id` | Yes | Edit an answer (stores diff) |
 | GET | `/answers/:id/history` | No | Edit history with unified diffs |
 | POST | `/answers/:id/ratings` | Yes | Rate an answer |
-| GET | `/answers/:id/ratings` | No | Get all ratings (with rater context) |
+| GET | `/answers/:id/ratings` | No | Get all ratings (paginated, with rater context) |
+| PUT | `/answers/:id/ratings/redact` | Yes | Redact PII from your own rating |
 | POST | `/answers/:id/dig-deeper` | Yes | Ask LLM to elaborate |
 | GET | `/answers/:id/deep-dives` | No | Get all deep dives |
+| POST | `/answers/:id/mark-stale` | Yes | Mark an answer as stale/deprecated |
 | POST | `/answers/:id/flag-contradiction` | Yes | Flag a contradiction |
 | GET | `/answers/:id/contradictions` | No | Get contradiction flags |
-| GET | `/admin/contradictions` | Yes | Review queue (pending flags) |
-| GET | `/admin/config` | Yes | Get deployment config |
-| PUT | `/admin/config` | Yes | Update deployment config |
+| GET | `/admin/contradictions` | Admin | Review queue (paginated, pending flags) |
+| GET | `/admin/config` | Admin | Get deployment config |
+| PUT | `/admin/config` | Admin | Update deployment config |
 | GET | `/graph` | No | Knowledge graph (nodes + edges) |
 | GET | `/graph/node/:id` | No | Node neighborhood (2-hop subgraph) |
 
