@@ -4,3 +4,4 @@ pub mod types;
 
 pub use client::Client;
 pub use error::Error;
+pub use types::*;
