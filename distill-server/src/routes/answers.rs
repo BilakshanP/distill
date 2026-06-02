@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     Json,
 };
@@ -105,21 +105,36 @@ pub async fn edit_answer(
     }))
 }
 
-#[utoipa::path(get, path = "/answers/{id}/history", responses((status = 200, body = Vec<EditHistoryEntry>)), tag = "answers")]
+#[utoipa::path(get, path = "/answers/{id}/history", responses((status = 200)), tag = "answers")]
 pub async fn get_history(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-) -> Result<Json<Vec<EditHistoryEntry>>, StatusCode> {
-    let rows = sqlx::query_as::<_, (Uuid, Uuid, String, Option<String>, chrono::DateTime<chrono::Utc>)>(
-        "SELECT id, editor_id, diff, edit_message, created_at FROM answer_edits WHERE answer_id = $1 ORDER BY created_at ASC"
-    )
-    .bind(id)
-    .fetch_all(&state.db)
-    .await
-    .map_err(|e| { tracing::error!("history fetch failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
-
-    Ok(Json(
-        rows.into_iter()
+    Query(params): Query<crate::routes::CursorParams>,
+) -> Result<Json<crate::routes::Paginated<EditHistoryEntry>>, StatusCode> {
+    let limit = params.limit.min(100);
+    let fetch_limit = limit + 1;
+    let rows = if let Some(ref cursor) = params.after {
+        let (ts, cid) = crate::routes::decode_cursor(cursor).ok_or(StatusCode::BAD_REQUEST)?;
+        sqlx::query_as::<_, (Uuid, Uuid, String, Option<String>, chrono::DateTime<chrono::Utc>)>(
+            "SELECT id, editor_id, diff, edit_message, created_at FROM answer_edits WHERE answer_id = $1 AND (created_at, id) > ($2, $3) ORDER BY created_at ASC, id ASC LIMIT $4"
+        ).bind(id).bind(ts).bind(cid).bind(fetch_limit).fetch_all(&state.db).await
+    } else {
+        sqlx::query_as::<_, (Uuid, Uuid, String, Option<String>, chrono::DateTime<chrono::Utc>)>(
+            "SELECT id, editor_id, diff, edit_message, created_at FROM answer_edits WHERE answer_id = $1 ORDER BY created_at ASC, id ASC LIMIT $2"
+        ).bind(id).bind(fetch_limit).fetch_all(&state.db).await
+    }.map_err(|e| { tracing::error!("history fetch failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+    let has_more = rows.len() as i64 > limit;
+    let items: Vec<_> = rows.into_iter().take(limit as usize).collect();
+    let next_cursor = if has_more {
+        items
+            .last()
+            .map(|r| crate::routes::encode_cursor(&r.4, &r.0))
+    } else {
+        None
+    };
+    Ok(Json(crate::routes::Paginated {
+        data: items
+            .into_iter()
             .map(|r| EditHistoryEntry {
                 id: r.0,
                 editor_id: r.1,
@@ -128,7 +143,9 @@ pub async fn get_history(
                 created_at: r.4,
             })
             .collect(),
-    ))
+        next_cursor,
+        has_more,
+    }))
 }
 
 #[utoipa::path(get, path = "/questions/{id}/answers", responses((status = 200, body = Vec<AnswerResponse>)), tag = "answers")]
@@ -486,21 +503,36 @@ pub async fn dig_deeper(
     ))
 }
 
-#[utoipa::path(get, path = "/answers/{id}/deep-dives", responses((status = 200, body = Vec<DigDeeperResponse>)), tag = "answers")]
+#[utoipa::path(get, path = "/answers/{id}/deep-dives", responses((status = 200)), tag = "answers")]
 pub async fn get_deep_dives(
     State(state): State<AppState>,
     Path(answer_id): Path<Uuid>,
-) -> Result<Json<Vec<DigDeeperResponse>>, StatusCode> {
-    let rows = sqlx::query_as::<_, (Uuid, Uuid, String, String, chrono::DateTime<chrono::Utc>)>(
-        "SELECT id, answer_id, prompt, response, created_at FROM deep_dives WHERE answer_id = $1 ORDER BY created_at ASC"
-    )
-    .bind(answer_id)
-    .fetch_all(&state.db)
-    .await
-    .map_err(|e| { tracing::error!("get deep dives failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
-
-    Ok(Json(
-        rows.into_iter()
+    Query(params): Query<crate::routes::CursorParams>,
+) -> Result<Json<crate::routes::Paginated<DigDeeperResponse>>, StatusCode> {
+    let limit = params.limit.min(100);
+    let fetch_limit = limit + 1;
+    let rows = if let Some(ref cursor) = params.after {
+        let (ts, cid) = crate::routes::decode_cursor(cursor).ok_or(StatusCode::BAD_REQUEST)?;
+        sqlx::query_as::<_, (Uuid, Uuid, String, String, chrono::DateTime<chrono::Utc>)>(
+            "SELECT id, answer_id, prompt, response, created_at FROM deep_dives WHERE answer_id = $1 AND (created_at, id) > ($2, $3) ORDER BY created_at ASC, id ASC LIMIT $4"
+        ).bind(answer_id).bind(ts).bind(cid).bind(fetch_limit).fetch_all(&state.db).await
+    } else {
+        sqlx::query_as::<_, (Uuid, Uuid, String, String, chrono::DateTime<chrono::Utc>)>(
+            "SELECT id, answer_id, prompt, response, created_at FROM deep_dives WHERE answer_id = $1 ORDER BY created_at ASC, id ASC LIMIT $2"
+        ).bind(answer_id).bind(fetch_limit).fetch_all(&state.db).await
+    }.map_err(|e| { tracing::error!("get deep dives failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+    let has_more = rows.len() as i64 > limit;
+    let items: Vec<_> = rows.into_iter().take(limit as usize).collect();
+    let next_cursor = if has_more {
+        items
+            .last()
+            .map(|r| crate::routes::encode_cursor(&r.4, &r.0))
+    } else {
+        None
+    };
+    Ok(Json(crate::routes::Paginated {
+        data: items
+            .into_iter()
             .map(|r| DigDeeperResponse {
                 id: r.0,
                 answer_id: r.1,
@@ -509,7 +541,9 @@ pub async fn get_deep_dives(
                 created_at: r.4,
             })
             .collect(),
-    ))
+        next_cursor,
+        has_more,
+    }))
 }
 
 async fn resolve_stale(

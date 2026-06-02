@@ -160,7 +160,8 @@ async fn test_answers_and_edit() {
     // History
     let resp = server.get(&format!("/answers/{}/history", a_id)).await;
     resp.assert_status_ok();
-    let history: Vec<serde_json::Value> = resp.json();
+    let body: serde_json::Value = resp.json();
+    let history = body["data"].as_array().unwrap();
     assert_eq!(history.len(), 1);
 }
 
