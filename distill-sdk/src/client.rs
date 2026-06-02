@@ -159,7 +159,7 @@ impl Client {
         Self::handle(resp).await
     }
 
-    pub async fn get_history(&self, answer_id: Uuid) -> Result<Vec<EditHistoryEntry>, Error> {
+    pub async fn get_history(&self, answer_id: Uuid) -> Result<Paginated<EditHistoryEntry>, Error> {
         let resp = self
             .request(
                 reqwest::Method::GET,
@@ -203,7 +203,10 @@ impl Client {
         Self::handle(resp).await
     }
 
-    pub async fn get_deep_dives(&self, answer_id: Uuid) -> Result<Vec<DigDeeperResponse>, Error> {
+    pub async fn get_deep_dives(
+        &self,
+        answer_id: Uuid,
+    ) -> Result<Paginated<DigDeeperResponse>, Error> {
         let resp = self
             .request(
                 reqwest::Method::GET,
@@ -306,7 +309,7 @@ impl Client {
     pub async fn get_question_comments(
         &self,
         question_id: Uuid,
-    ) -> Result<Vec<CommentResponse>, Error> {
+    ) -> Result<Paginated<CommentResponse>, Error> {
         let resp = self
             .request(
                 reqwest::Method::GET,
@@ -336,7 +339,7 @@ impl Client {
     pub async fn get_answer_comments(
         &self,
         answer_id: Uuid,
-    ) -> Result<Vec<CommentResponse>, Error> {
+    ) -> Result<Paginated<CommentResponse>, Error> {
         let resp = self
             .request(
                 reqwest::Method::GET,

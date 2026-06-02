@@ -90,7 +90,7 @@ async fn test_sdk_e2e_flow() {
     assert_eq!(comment.body, "This is a test comment");
 
     let comments = client.get_question_comments(q.id).await.unwrap();
-    assert_eq!(comments.len(), 1);
+    assert_eq!(comments.data.len(), 1);
 
     // Get answers (empty since no LLM configured)
     let answers = client.get_answers(q.id).await.unwrap();
