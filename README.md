@@ -27,7 +27,7 @@ When someone asks a question, Distill:
 ### Setup
 
 ```bash
-git clone <repo-url> && cd distill
+git clone https://github.com/BilakshanP/distill.git && cd distill
 
 # Start the database
 docker compose up -d

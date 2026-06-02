@@ -9,7 +9,7 @@
 ## Setup
 
 ```bash
-git clone <repo-url> && cd distill
+git clone https://github.com/BilakshanP/distill.git && cd distill
 
 # Set up git hooks (required)
 git config core.hooksPath .githooks
