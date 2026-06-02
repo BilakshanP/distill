@@ -142,4 +142,4 @@ All config is via environment variables (see `.env.example`):
 
 ## License
 
-MIT
+MIT OR Apache-2.0
