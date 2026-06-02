@@ -45,6 +45,19 @@ async fn main() {
     let addr = format!("{}:{}", cfg.host, cfg.port);
     tracing::info!("listening on {}", addr);
 
+    // Rate limiting: 60 requests/min per IP
+    let governor_conf = tower_governor::governor::GovernorConfigBuilder::default()
+        .per_second(1)
+        .burst_size(60)
+        .finish()
+        .unwrap();
+    let app = app.layer(tower_governor::GovernorLayer::new(governor_conf));
+
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .await
+    .unwrap();
 }

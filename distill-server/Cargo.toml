@@ -28,6 +28,7 @@ sha2 = "0.10"
 hex = "0.4"
 utoipa = { version = "5", features = ["axum_extras", "uuid", "chrono"] }
 utoipa-swagger-ui = { version = "9", features = ["axum"] }
+tower-governor = { version = "0.8", package = "tower_governor" }
 
 
 [dev-dependencies]
