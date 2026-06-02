@@ -265,6 +265,17 @@ All tables include a `tenant_id` column (unused in MVP, future-proofs for multi-
 - **Stale resolution reuse:** If an answer marked stale is similar to a previously resolved stale answer, reuse that resolution as a starting point.
 - **Token budget:** Optional per-deployment token budget config. When budget is exhausted, LLM features gracefully degrade (serve cached responses only, queue requests for later).
 
+## PII Redaction & Account Deletion
+
+- **Rating PII redaction:** Users can redact their `rater_original_query` and `comment` from any rating they've left via `PUT /answers/:id/ratings` (setting fields to null). This exists because the original query and comment may contain PII or sensitive context the user later wants removed.
+- **Account deletion:** Users can delete their account via `DELETE /me`. This:
+  - Anonymizes all their contributions (display name → "Deleted User", nullifies email, avatar)
+  - Removes `rater_original_query` and `comment` from all their ratings (scores preserved for integrity)
+  - Nullifies `flagged_by` on contradiction flags they raised
+  - Keeps questions/answers intact with anonymized attribution (content is community knowledge)
+  - Deletes the user record and invalidates their JWT
+  - Irreversible
+
 ## Visual Knowledge Graph
 
 - Obsidian-style interactive force-directed graph
