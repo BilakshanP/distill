@@ -75,17 +75,21 @@ pub async fn create_question(
         });
     }
 
-    // Generate AI answer in background
+    // Generate AI answer in background (respects answer_mode config)
     if let Some(chat_model) = &state.llm_chat_model {
-        let db = state.db.clone();
-        let chat_model = chat_model.clone();
-        let question_id = row.0;
-        let title = req.title.clone();
-        let body = req.body.clone();
+        let config = crate::routes::get_config_map(&state.db).await;
+        let answer_mode = config.get("answer_mode").map(|s| s.as_str()).unwrap_or("ai-first");
+        if answer_mode != "community-only" {
+            let db = state.db.clone();
+            let chat_model = chat_model.clone();
+            let question_id = row.0;
+            let title = req.title.clone();
+            let body = req.body.clone();
 
-        tokio::spawn(async move {
-            crate::routes::answers::generate_ai_answer(&db, &chat_model, question_id, &title, &body).await;
-        });
+            tokio::spawn(async move {
+                crate::routes::answers::generate_ai_answer(&db, &chat_model, question_id, &title, &body).await;
+            });
+        }
     }
 
     Ok((
@@ -238,15 +242,22 @@ pub async fn search_questions(
     let limit = params.limit.min(100);
     let k: f64 = 60.0;
 
-    // Generate embedding for the query if model is configured
-    let query_embedding = if let Some(model) = &state.llm_embedding_model {
-        let client = genai::Client::default();
-        match client.embed(model.as_str(), &params.q, None).await {
-            Ok(resp) => Some(pgvector::Vector::from(resp.embeddings[0].vector.clone())),
-            Err(e) => {
-                tracing::warn!("embedding generation for search query failed: {}", e);
-                None
+    let config = crate::routes::get_config_map(&state.db).await;
+    let search_mode = config.get("search_mode").map(|s| s.as_str()).unwrap_or("hybrid");
+
+    // Generate embedding for the query if model is configured and search_mode is hybrid
+    let query_embedding = if search_mode == "hybrid" {
+        if let Some(model) = &state.llm_embedding_model {
+            let client = genai::Client::default();
+            match client.embed(model.as_str(), &params.q, None).await {
+                Ok(resp) => Some(pgvector::Vector::from(resp.embeddings[0].vector.clone())),
+                Err(e) => {
+                    tracing::warn!("embedding generation for search query failed: {}", e);
+                    None
+                }
             }
+        } else {
+            None
         }
     } else {
         None
