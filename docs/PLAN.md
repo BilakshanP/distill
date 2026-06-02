@@ -1,5 +1,7 @@
 # Distill — Implementation Plan
 
+> **Note:** This is the original design document created before implementation. For current API reference and setup instructions, see [README.md](../README.md). For contributor guidelines, see [CONTRIBUTING.md](../CONTRIBUTING.md). The implementation may differ from this plan in details — this document is kept for historical context and architectural rationale.
+
 ## Overview
 
 Distill is a configurable community Q&A platform with intelligent question deduplication, transparent ratings, AI-generated answers with human refinement, and LLM-powered contradiction detection. It surfaces existing knowledge before creating new entries, saves every query to improve future matching, and visualizes the knowledge topology as an interactive graph.
