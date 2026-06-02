@@ -93,6 +93,99 @@ pub async fn create_question(
 }
 
 #[derive(Deserialize)]
+pub struct PreviewRequest {
+    pub title: String,
+    pub body: String,
+}
+
+#[derive(Serialize)]
+pub struct PreviewResponse {
+    pub matches: Vec<SearchResult>,
+    pub rephrased: Option<String>,
+}
+
+pub async fn preview_question(
+    State(state): State<AppState>,
+    _auth: AuthUser,
+    Json(req): Json<PreviewRequest>,
+) -> Result<Json<PreviewResponse>, StatusCode> {
+    let query = format!("{} {}", req.title, req.body);
+
+    // Find matching questions using hybrid search
+    let query_embedding = if let Some(model) = &state.llm_embedding_model {
+        let client = genai::Client::default();
+        client.embed(model.as_str(), &query, None).await.ok()
+            .map(|r| pgvector::Vector::from(r.embeddings[0].vector.clone()))
+    } else {
+        None
+    };
+
+    let matches = if let Some(embedding) = &query_embedding {
+        sqlx::query_as::<_, (Uuid, String, String, Vec<String>, f64, chrono::DateTime<chrono::Utc>)>(
+            r#"
+            WITH fts AS (
+                SELECT id, ROW_NUMBER() OVER (ORDER BY ts_rank(tsv, websearch_to_tsquery('english', $1)) DESC) AS rn
+                FROM questions WHERE tsv @@ websearch_to_tsquery('english', $1) LIMIT 50
+            ),
+            vec AS (
+                SELECT id, ROW_NUMBER() OVER (ORDER BY embedding <=> $2) AS rn
+                FROM questions WHERE embedding IS NOT NULL LIMIT 50
+            ),
+            rrf AS (
+                SELECT COALESCE(fts.id, vec.id) AS id,
+                       COALESCE(1.0 / (60.0 + fts.rn), 0.0) + COALESCE(1.0 / (60.0 + vec.rn), 0.0) AS score
+                FROM fts FULL OUTER JOIN vec ON fts.id = vec.id
+            )
+            SELECT q.id, q.title, q.body, q.tags, rrf.score, q.created_at
+            FROM rrf JOIN questions q ON q.id = rrf.id
+            ORDER BY rrf.score DESC LIMIT 5
+            "#,
+        )
+        .bind(&query)
+        .bind(embedding)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default()
+    } else {
+        sqlx::query_as::<_, (Uuid, String, String, Vec<String>, f64, chrono::DateTime<chrono::Utc>)>(
+            r#"SELECT id, title, body, tags, ts_rank(tsv, websearch_to_tsquery('english', $1))::float8 AS score, created_at
+               FROM questions WHERE tsv @@ websearch_to_tsquery('english', $1)
+               ORDER BY score DESC LIMIT 5"#,
+        )
+        .bind(&query)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default()
+    };
+
+    // Rephrase via LLM
+    let rephrased = if let Some(model) = &state.llm_chat_model {
+        use genai::chat::{ChatMessage, ChatRequest};
+        let client = genai::Client::default();
+        let chat_req = ChatRequest::new(vec![
+            ChatMessage::system("You are a helpful assistant that rephrases questions to be clearer and more searchable. Return ONLY the rephrased question, nothing else."),
+            ChatMessage::user(format!("Rephrase this question:\nTitle: {}\nBody: {}", req.title, req.body)),
+        ]);
+        match client.exec_chat(model.as_str(), chat_req, None).await {
+            Ok(resp) => resp.first_text().map(|s| s.to_string()),
+            Err(e) => {
+                tracing::warn!("rephrase failed: {}", e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    Ok(Json(PreviewResponse {
+        matches: matches.into_iter().map(|r| SearchResult {
+            id: r.0, title: r.1, body: r.2, tags: r.3, score: r.4, created_at: r.5,
+        }).collect(),
+        rephrased,
+    }))
+}
+
+#[derive(Deserialize)]
 pub struct SearchParams {
     pub q: String,
     #[serde(default = "default_limit")]
