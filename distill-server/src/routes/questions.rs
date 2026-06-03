@@ -182,10 +182,19 @@ pub async fn preview_question(
     // Find matching questions using hybrid search
     let query_embedding = if let Some(model) = &state.llm_embedding_model {
         let client = genai::Client::default();
-        match client.embed(model.as_str(), &query, None).await {
-            Ok(r) => Some(pgvector::Vector::from(r.embeddings[0].vector.clone())),
-            Err(e) => {
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            client.embed(model.as_str(), &query, None),
+        )
+        .await
+        {
+            Ok(Ok(r)) => Some(pgvector::Vector::from(r.embeddings[0].vector.clone())),
+            Ok(Err(e)) => {
                 tracing::error!("preview embedding failed: {:?}", e);
+                None
+            }
+            Err(_) => {
+                tracing::warn!("preview embedding timed out, falling back to keyword-only");
                 None
             }
         }
@@ -339,10 +348,19 @@ pub async fn search_questions(
     let query_embedding = if search_mode == "hybrid" {
         if let Some(model) = &state.llm_embedding_model {
             let client = genai::Client::default();
-            match client.embed(model.as_str(), &params.q, None).await {
-                Ok(resp) => Some(pgvector::Vector::from(resp.embeddings[0].vector.clone())),
-                Err(e) => {
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                client.embed(model.as_str(), &params.q, None),
+            )
+            .await
+            {
+                Ok(Ok(resp)) => Some(pgvector::Vector::from(resp.embeddings[0].vector.clone())),
+                Ok(Err(e)) => {
                     tracing::warn!("embedding generation for search query failed: {}", e);
+                    None
+                }
+                Err(_) => {
+                    tracing::warn!("embedding generation timed out, falling back to keyword-only");
                     None
                 }
             }

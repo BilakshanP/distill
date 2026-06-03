@@ -119,3 +119,7 @@ Set via `PUT /admin/config`:
 ## Rate Limiting
 
 The server enforces rate limiting at 60 requests/minute per IP address. Exceeding this returns `429 Too Many Requests`.
+
+## Search Behavior
+
+Search uses hybrid retrieval (BM25 keyword + vector similarity) by default. If the embedding provider is unavailable or times out (5s), search degrades gracefully to keyword-only with no user-facing error. This means search always returns results, though quality may be reduced without vector similarity.
