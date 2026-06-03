@@ -106,24 +106,6 @@ cargo run -p distill-server --release  # No swagger, smaller binary
 - **Diff engine:** diffy-imara
 - **Auth:** GitHub OAuth + JWT
 
-## Project Structure
-
-```
-distill/
-├── distill-server/        # API server
-│   ├── src/
-│   │   ├── main.rs        # Entry point
-│   │   ├── lib.rs         # Router + AppState (shared with tests)
-│   │   ├── config.rs      # Environment config
-│   │   ├── auth/          # OAuth + JWT + middleware
-│   │   └── routes/        # All endpoint handlers
-│   ├── migrations/        # SQL migrations (auto-run on boot)
-│   └── tests/             # Integration tests
-├── distill-sdk/           # Typed Rust client SDK
-├── docker-compose.yml     # PostgreSQL + pgvector
-└── PLAN.md                # Full implementation plan
-```
-
 ## Configuration
 
 - **Environment variables** (infrastructure: DB, secrets, model names) — see [`.env.example`](.env.example)
