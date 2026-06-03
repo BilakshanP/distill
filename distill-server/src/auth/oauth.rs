@@ -1,7 +1,7 @@
 use axum::{
     extract::{Query, State},
     http::StatusCode,
-    response::Redirect,
+    response::{IntoResponse, Redirect},
     Json,
 };
 use oauth2::{
@@ -83,15 +83,36 @@ pub async fn github_login(State(state): State<AppState>) -> Redirect {
     Redirect::to(auth_url.as_str())
 }
 
+pub async fn github_login_web(State(state): State<AppState>) -> Redirect {
+    let client = BasicClient::new(ClientId::new(state.github_client_id.clone()))
+        .set_client_secret(ClientSecret::new(state.github_client_secret.clone()))
+        .set_auth_uri(AuthUrl::new("https://github.com/login/oauth/authorize".into()).unwrap())
+        .set_token_uri(TokenUrl::new("https://github.com/login/oauth/access_token".into()).unwrap())
+        .set_redirect_uri(
+            RedirectUrl::new(format!(
+                "{}/auth/github/callback?redirect=true",
+                state.base_url
+            ))
+            .unwrap(),
+        );
+    let (auth_url, _csrf) = client
+        .authorize_url(CsrfToken::new_random)
+        .add_scope(Scope::new("read:user".into()))
+        .add_scope(Scope::new("user:email".into()))
+        .url();
+    Redirect::to(auth_url.as_str())
+}
+
 #[derive(Deserialize)]
 pub struct CallbackParams {
     code: String,
+    redirect: Option<bool>,
 }
 
 pub async fn github_callback(
     State(state): State<AppState>,
     Query(params): Query<CallbackParams>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
+) -> Result<axum::response::Response, StatusCode> {
     let client = oauth_client(&state);
 
     let http_client = reqwest::ClientBuilder::new()
@@ -162,7 +183,14 @@ pub async fn github_callback(
     let jwt = jwt::create_token_with_tenant(user.0, tenant_id, &state.jwt_secret)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    Ok(Json(serde_json::json!({ "token": jwt })))
+    if params.redirect.unwrap_or(false) {
+        let frontend =
+            std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:5173".to_string());
+        let url = format!("{}/login?token={}", frontend, jwt);
+        Ok(axum::response::Redirect::to(&url).into_response())
+    } else {
+        Ok(Json(serde_json::json!({ "token": jwt })).into_response())
+    }
 }
 
 // === Google OAuth ===

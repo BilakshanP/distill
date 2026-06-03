@@ -200,6 +200,7 @@ pub fn build_router(state: AppState) -> Router {
     let app = Router::new()
         .route("/health", get(health))
         .route("/auth/github", get(auth::oauth::github_login))
+        .route("/auth/github/web", get(auth::oauth::github_login_web))
         .route("/auth/github/callback", get(auth::oauth::github_callback))
         .route("/auth/google", get(auth::oauth::google_login))
         .route("/auth/google/callback", get(auth::oauth::google_callback))
