@@ -1,5 +1,6 @@
 [package]
 name = "distill-server"
+default-run = "distill-server"
 version = "0.1.0"
 edition = "2021"
 license.workspace = true

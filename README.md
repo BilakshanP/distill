@@ -87,10 +87,11 @@ cargo run -p distill-server --release  # No swagger, smaller binary
 
 ## Documentation
 
-- **[API Reference](docs/API.md)** — Full endpoint list, pagination, config keys
+- **[API Reference](docs/API.md)** — Full endpoint list, pagination, config keys, evaluation
 - **[SDK Usage](distill-sdk/README.md)** — Typed Rust client library
 - **[Contributing](CONTRIBUTING.md)** — Dev setup, git hooks, code style
 - **[Design Document](docs/PLAN.md)** — Original architecture and implementation plan
+- **[Eval Fixtures](docs/fixtures/)** — Sample datasets for retrieval/contradiction benchmarking
 
 ## Tech Stack
 
