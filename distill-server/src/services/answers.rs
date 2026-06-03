@@ -26,12 +26,17 @@ async fn do_generate(
     let query_text = format!("{} {}", title, body);
 
     // Try to get the question's embedding for vector search
-    let embedding: Option<pgvector::Vector> =
-        sqlx::query_scalar("SELECT embedding FROM questions WHERE id = $1")
-            .bind(question_id)
-            .fetch_optional(db)
-            .await?
-            .flatten();
+    let row: Option<(pgvector::Vector, Option<String>)> = sqlx::query_as(
+        "SELECT embedding, embedding_model FROM questions WHERE id = $1 AND embedding IS NOT NULL",
+    )
+    .bind(question_id)
+    .fetch_optional(db)
+    .await?;
+
+    let (embedding, emb_model) = match row {
+        Some((v, m)) => (Some(v), m.unwrap_or_default()),
+        None => (None, String::new()),
+    };
 
     // Full hybrid RRF retrieval (BM25 + vector when embedding available)
     let context_rows = if let Some(emb) = &embedding {
@@ -42,7 +47,7 @@ async fn do_generate(
                ),
                vec AS (
                  SELECT id, ROW_NUMBER() OVER (ORDER BY embedding <=> $2) AS rn
-                 FROM questions WHERE embedding IS NOT NULL AND id != $3 LIMIT 20
+                 FROM questions WHERE embedding IS NOT NULL AND embedding_model = $4 AND id != $3 LIMIT 20
                ),
                rrf AS (
                  SELECT COALESCE(fts.id, vec.id) AS id,
@@ -61,6 +66,7 @@ async fn do_generate(
         .bind(&query_text)
         .bind(emb)
         .bind(question_id)
+        .bind(&emb_model)
         .fetch_all(db)
         .await?
     } else {

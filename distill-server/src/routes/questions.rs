@@ -204,7 +204,7 @@ pub async fn preview_question(
             ),
             vec AS (
                 SELECT id, ROW_NUMBER() OVER (ORDER BY embedding <=> $2) AS rn
-                FROM questions WHERE embedding IS NOT NULL LIMIT 50
+                FROM questions WHERE embedding IS NOT NULL AND embedding_model = $3 LIMIT 50
             ),
             rrf AS (
                 SELECT COALESCE(fts.id, vec.id) AS id,
@@ -218,6 +218,7 @@ pub async fn preview_question(
         )
         .bind(&query)
         .bind(embedding)
+        .bind(state.llm_embedding_model.as_deref().unwrap_or(""))
         .fetch_all(&state.db)
         .await
         .map_err(|e| { tracing::error!("preview search query failed: {:?}", e); })
@@ -379,7 +380,7 @@ pub async fn search_questions(
                 SELECT id, 1 - (embedding <=> $2) AS rank,
                        ROW_NUMBER() OVER (ORDER BY embedding <=> $2) AS rn
                 FROM questions
-                WHERE embedding IS NOT NULL
+                WHERE embedding IS NOT NULL AND embedding_model = $6
                 LIMIT 100
             ),
             rrf AS (
@@ -399,6 +400,7 @@ pub async fn search_questions(
         .bind(k)
         .bind(limit)
         .bind(params.offset)
+        .bind(state.llm_embedding_model.as_deref().unwrap_or(""))
         .fetch_all(&state.db)
         .await
         .map_err(|e| {

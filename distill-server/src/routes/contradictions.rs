@@ -169,24 +169,26 @@ async fn do_detect(
     use genai::chat::{ChatMessage, ChatRequest};
 
     // Semantic prefilter: find candidate answers via embedding similarity of parent questions
-    let question_embedding: Option<pgvector::Vector> =
-        sqlx::query_scalar("SELECT embedding FROM questions WHERE id = $1")
-            .bind(question_id)
-            .fetch_optional(db)
-            .await?
-            .flatten();
+    let emb_row: Option<(pgvector::Vector, Option<String>)> = sqlx::query_as(
+        "SELECT embedding, embedding_model FROM questions WHERE id = $1 AND embedding IS NOT NULL",
+    )
+    .bind(question_id)
+    .fetch_optional(db)
+    .await?;
 
-    let other_answers = if let Some(emb) = question_embedding {
-        // Find answers to the most semantically similar questions
+    let other_answers = if let Some((emb, model)) = emb_row {
+        let model = model.unwrap_or_default();
+        // Find answers to the most semantically similar questions (same embedding model)
         sqlx::query_as::<_, (Uuid, String)>(
             r#"SELECT a.id, a.body FROM answers a
                JOIN questions q ON q.id = a.question_id
-               WHERE a.id != $1 AND q.embedding IS NOT NULL
+               WHERE a.id != $1 AND q.embedding IS NOT NULL AND q.embedding_model = $3
                ORDER BY q.embedding <=> $2
                LIMIT 5"#,
         )
         .bind(answer_id)
         .bind(emb)
+        .bind(model)
         .fetch_all(db)
         .await?
     } else {

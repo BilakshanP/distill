@@ -14,8 +14,9 @@ pub async fn generate_embedding(
     let resp = client.embed(model, text, None).await?;
     let vector = Vector::from(resp.embeddings[0].vector.clone());
 
-    sqlx::query("UPDATE questions SET embedding = $1 WHERE id = $2")
+    sqlx::query("UPDATE questions SET embedding = $1, embedding_model = $2 WHERE id = $3")
         .bind(vector)
+        .bind(model)
         .bind(question_id)
         .execute(db)
         .await?;
