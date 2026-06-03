@@ -1,6 +1,10 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { api, isLoggedIn } from '$lib/api';
+	import { Button } from '$lib/components/ui/button';
+	import { Input } from '$lib/components/ui/input';
+	import { Textarea } from '$lib/components/ui/textarea';
+	import * as Card from '$lib/components/ui/card';
 
 	let title = $state('');
 	let body = $state('');
@@ -27,40 +31,45 @@
 
 <svelte:head><title>Ask a Question - Distill</title></svelte:head>
 
-<div class="space-y-4">
-	<h1 class="text-2xl font-bold text-gray-900">Ask a Question</h1>
+<div class="max-w-2xl mx-auto space-y-6">
+	<h1 class="text-2xl font-bold tracking-tight">Ask a Question</h1>
 
 	{#if !isLoggedIn()}
-		<p class="text-gray-600">Please <a href="/login" class="text-blue-600 hover:underline">login</a> to ask a question.</p>
+		<Card.Root>
+			<Card.Content class="py-8 text-center">
+				<p class="text-muted-foreground mb-4">You need to be logged in to ask a question.</p>
+				<Button href="/login">Login</Button>
+			</Card.Content>
+		</Card.Root>
 	{:else}
 		{#if error}
-			<p class="text-red-600 text-sm">{error}</p>
+			<p class="text-destructive text-sm">{error}</p>
 		{/if}
 
 		<form onsubmit={(e) => { e.preventDefault(); submit(); }} class="space-y-4">
-			<div>
-				<label for="title" class="block text-sm font-medium text-gray-700 mb-1">Title</label>
-				<input id="title" bind:value={title} type="text" class="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="What's your question?" />
+			<div class="space-y-2">
+				<label for="title" class="text-sm font-medium">Title</label>
+				<Input id="title" bind:value={title} placeholder="What's your question?" />
 			</div>
 
-			<div>
-				<label for="body" class="block text-sm font-medium text-gray-700 mb-1">Body</label>
-				<textarea id="body" bind:value={body} rows="6" class="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Provide details..."></textarea>
+			<div class="space-y-2">
+				<label for="body" class="text-sm font-medium">Body</label>
+				<Textarea id="body" bind:value={body} rows={6} placeholder="Provide details..." />
 			</div>
 
-			<div>
-				<label for="tags" class="block text-sm font-medium text-gray-700 mb-1">Tags (comma-separated)</label>
-				<input id="tags" bind:value={tags} type="text" class="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="rust, axum, database" />
+			<div class="space-y-2">
+				<label for="tags" class="text-sm font-medium">Tags</label>
+				<Input id="tags" bind:value={tags} placeholder="rust, axum, database (comma-separated)" />
 			</div>
 
-			<label class="flex items-center gap-2 text-sm text-gray-700">
-				<input type="checkbox" bind:checked={aiAnswer} class="rounded border-gray-300" />
-				Generate AI answer
+			<label class="flex items-center gap-2 text-sm">
+				<input type="checkbox" bind:checked={aiAnswer} class="rounded border-border" />
+				<span>Generate AI answer</span>
 			</label>
 
-			<button type="submit" disabled={submitting || !title.trim() || !body.trim()} class="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:bg-gray-300">
+			<Button type="submit" disabled={submitting || !title.trim() || !body.trim()}>
 				{submitting ? 'Submitting...' : 'Submit Question'}
-			</button>
+			</Button>
 		</form>
 	{/if}
 </div>

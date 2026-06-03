@@ -1,6 +1,8 @@
 <script lang="ts">
 	import './layout.css';
 	import { isLoggedIn, clearToken } from '$lib/api';
+	import { Button } from '$lib/components/ui/button';
+	import { Separator } from '$lib/components/ui/separator';
 
 	let { children } = $props();
 	let loggedIn = $state(false);
@@ -15,24 +17,28 @@
 	}
 </script>
 
-<div class="min-h-screen bg-gray-50">
-	<nav class="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-		<div class="flex items-center gap-6">
-			<a href="/" class="text-xl font-bold text-gray-900">Distill</a>
-			<a href="/search" class="text-sm text-gray-600 hover:text-gray-900">Search</a>
-			<a href="/ask" class="text-sm text-gray-600 hover:text-gray-900">Ask</a>
-			<a href="/tags" class="text-sm text-gray-600 hover:text-gray-900">Tags</a>
+<div class="min-h-screen bg-background font-mono">
+	<header class="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+		<div class="max-w-5xl mx-auto flex h-14 items-center justify-between px-6">
+			<div class="flex items-center gap-6">
+				<a href="/" class="text-lg font-bold tracking-tight">distill</a>
+				<nav class="flex items-center gap-4 text-sm">
+					<a href="/search" class="text-muted-foreground hover:text-foreground transition-colors">Search</a>
+					<a href="/ask" class="text-muted-foreground hover:text-foreground transition-colors">Ask</a>
+					<a href="/tags" class="text-muted-foreground hover:text-foreground transition-colors">Tags</a>
+				</nav>
+			</div>
+			<div>
+				{#if loggedIn}
+					<Button variant="ghost" size="sm" onclick={logout}>Logout</Button>
+				{:else}
+					<Button variant="outline" size="sm" href="/login">Login</Button>
+				{/if}
+			</div>
 		</div>
-		<div>
-			{#if loggedIn}
-				<button onclick={logout} class="text-sm text-gray-600 hover:text-gray-900">Logout</button>
-			{:else}
-				<a href="/login" class="text-sm text-blue-600 hover:text-blue-800">Login</a>
-			{/if}
-		</div>
-	</nav>
+	</header>
 
-	<main class="max-w-4xl mx-auto px-6 py-8">
+	<main class="max-w-5xl mx-auto px-6 py-8">
 		{@render children()}
 	</main>
 </div>
