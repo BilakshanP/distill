@@ -26,6 +26,7 @@ fn default_limit() -> i64 {
     50
 }
 
+#[utoipa::path(get, path = "/tags", responses((status = 200)), tag = "tags")]
 pub async fn list_tags(
     State(state): State<AppState>,
     Query(params): Query<TagParams>,

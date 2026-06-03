@@ -29,6 +29,7 @@ use auth::middleware::AuthUser;
     ),
     paths(
         routes::questions::create_question,
+        routes::questions::list_questions,
         routes::questions::get_question,
         routes::questions::search_questions,
         routes::questions::preview_question,
@@ -41,6 +42,12 @@ use auth::middleware::AuthUser;
         routes::ratings::create_rating,
         routes::ratings::get_ratings,
         routes::ratings::redact_rating,
+        routes::contradictions::flag_contradiction,
+        routes::contradictions::get_contradictions_for_answer,
+        routes::contradictions::admin_review_queue,
+        routes::graph::get_graph,
+        routes::graph::get_node_neighborhood,
+        routes::tags::list_tags,
     ),
     components(schemas(
         routes::questions::CreateQuestionRequest,

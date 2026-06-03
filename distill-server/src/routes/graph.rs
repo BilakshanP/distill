@@ -40,6 +40,7 @@ fn default_limit() -> i64 {
     100
 }
 
+#[utoipa::path(get, path = "/graph", responses((status = 200)), tag = "graph")]
 pub async fn get_graph(
     State(state): State<AppState>,
     Query(params): Query<GraphParams>,
@@ -183,6 +184,7 @@ pub async fn get_graph(
     Ok(Json(GraphResponse { nodes, edges }))
 }
 
+#[utoipa::path(get, path = "/graph/node/{id}", responses((status = 200)), tag = "graph")]
 pub async fn get_node_neighborhood(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,

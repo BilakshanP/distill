@@ -47,12 +47,13 @@ impl From<ContradictionRow> for ContradictionResponse {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct FlagContradictionRequest {
     pub contradicts_answer_id: Uuid,
     pub explanation: String,
 }
 
+#[utoipa::path(post, path = "/answers/{id}/flag-contradiction", responses((status = 201)), tag = "contradictions")]
 pub async fn flag_contradiction(
     State(state): State<AppState>,
     Path(answer_id): Path<Uuid>,
@@ -76,6 +77,7 @@ pub async fn flag_contradiction(
     Ok((StatusCode::CREATED, Json(row.into())))
 }
 
+#[utoipa::path(get, path = "/answers/{id}/contradictions", responses((status = 200)), tag = "contradictions")]
 pub async fn get_contradictions_for_answer(
     State(state): State<AppState>,
     Path(answer_id): Path<Uuid>,
@@ -98,6 +100,7 @@ pub async fn get_contradictions_for_answer(
     ))
 }
 
+#[utoipa::path(get, path = "/admin/contradictions", responses((status = 200)), tag = "contradictions")]
 pub async fn admin_review_queue(
     State(state): State<AppState>,
     _auth: crate::auth::middleware::AdminUser,
