@@ -153,3 +153,11 @@ pub struct ConfigResponse {
 pub struct ReEmbedResponse {
     pub enqueued: i64,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct TenantResponse {
+    pub id: uuid::Uuid,
+    pub name: String,
+    pub slug: String,
+    pub created_at: String,
+}

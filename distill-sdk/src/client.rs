@@ -451,4 +451,41 @@ impl Client {
         let resp = req.send().await?;
         Self::handle(resp).await
     }
+
+    pub async fn create_tenant(&self, name: &str, slug: &str) -> Result<TenantResponse, Error> {
+        let resp = self
+            .request(reqwest::Method::POST, "/admin/tenants")
+            .json(&serde_json::json!({ "name": name, "slug": slug }))
+            .send()
+            .await?;
+        Self::handle(resp).await
+    }
+
+    pub async fn list_tenants(&self) -> Result<Vec<TenantResponse>, Error> {
+        let resp = self
+            .request(reqwest::Method::GET, "/admin/tenants")
+            .send()
+            .await?;
+        Self::handle(resp).await
+    }
+
+    pub async fn assign_tenant(&self, user_id: Uuid, tenant_id: Uuid) -> Result<(), Error> {
+        let resp = self
+            .request(reqwest::Method::PUT, "/admin/tenants/assign")
+            .json(&serde_json::json!({ "user_id": user_id, "tenant_id": tenant_id }))
+            .send()
+            .await?;
+        Self::handle_no_body(resp).await
+    }
+
+    pub async fn promote_user(&self, user_id: Uuid) -> Result<(), Error> {
+        let resp = self
+            .request(
+                reqwest::Method::PUT,
+                &format!("/admin/users/{}/promote", user_id),
+            )
+            .send()
+            .await?;
+        Self::handle_no_body(resp).await
+    }
 }
