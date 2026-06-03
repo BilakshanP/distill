@@ -610,3 +610,214 @@ async fn test_non_admin_cannot_promote() {
         .await;
     resp.assert_status(axum::http::StatusCode::FORBIDDEN);
 }
+
+#[tokio::test]
+async fn test_duplicate_contradiction_returns_409() {
+    let server = setup().await;
+    let (uid, token) = create_test_user().await;
+    let db = get_db().await;
+
+    let q_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO questions (id, author_id, title, body, original_query) VALUES ($1, $2, 'Q', 'B', 'Q B')")
+        .bind(q_id).bind(uid).execute(&db).await.unwrap();
+    let a1 = Uuid::new_v4();
+    let a2 = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO answers (id, question_id, author_type, body) VALUES ($1, $2, 'human', 'yes')",
+    )
+    .bind(a1)
+    .bind(q_id)
+    .execute(&db)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO answers (id, question_id, author_type, body) VALUES ($1, $2, 'human', 'no')",
+    )
+    .bind(a2)
+    .bind(q_id)
+    .execute(&db)
+    .await
+    .unwrap();
+
+    // First flag succeeds
+    let resp = server
+        .post(&format!("/answers/{}/flag-contradiction", a1))
+        .authorization_bearer(&token)
+        .json(&serde_json::json!({"contradicts_answer_id": a2, "explanation": "opposite"}))
+        .await;
+    resp.assert_status(axum::http::StatusCode::CREATED);
+
+    // Duplicate returns 409
+    let resp = server
+        .post(&format!("/answers/{}/flag-contradiction", a1))
+        .authorization_bearer(&token)
+        .json(&serde_json::json!({"contradicts_answer_id": a2, "explanation": "same thing"}))
+        .await;
+    resp.assert_status(axum::http::StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+async fn test_delete_account_anonymizes() {
+    let server = setup().await;
+    let (uid, token) = create_test_user().await;
+    let db = get_db().await;
+
+    // Create a rating to verify anonymization
+    let q_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO questions (id, author_id, title, body, original_query) VALUES ($1, $2, 'Q', 'B', 'Q B')")
+        .bind(q_id).bind(uid).execute(&db).await.unwrap();
+    let a_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO answers (id, question_id, author_type, body) VALUES ($1, $2, 'human', 'ans')",
+    )
+    .bind(a_id)
+    .bind(q_id)
+    .execute(&db)
+    .await
+    .unwrap();
+    server
+        .post(&format!("/answers/{}/ratings", a_id))
+        .authorization_bearer(&token)
+        .json(&serde_json::json!({"score": 4, "comment": "secret opinion", "rater_original_query": "my query"}))
+        .await;
+
+    // Delete account
+    let resp = server.delete("/me").authorization_bearer(&token).await;
+    resp.assert_status(axum::http::StatusCode::NO_CONTENT);
+
+    // Verify user anonymized
+    let (name, email): (String, Option<String>) =
+        sqlx::query_as("SELECT display_name, email FROM users WHERE id = $1")
+            .bind(uid)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+    assert_eq!(name, "Deleted User");
+    assert!(email.is_none());
+
+    // Verify rating PII removed
+    let (comment, query): (Option<String>, Option<String>) =
+        sqlx::query_as("SELECT comment, rater_original_query FROM ratings WHERE rater_id = $1")
+            .bind(uid)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+    assert!(comment.is_none());
+    assert!(query.is_none());
+}
+
+#[tokio::test]
+async fn test_redact_rating() {
+    let server = setup().await;
+    let (uid, token) = create_test_user().await;
+    let db = get_db().await;
+
+    let q_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO questions (id, author_id, title, body, original_query) VALUES ($1, $2, 'Q', 'B', 'Q B')")
+        .bind(q_id).bind(uid).execute(&db).await.unwrap();
+    let a_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO answers (id, question_id, author_type, body) VALUES ($1, $2, 'human', 'ans')",
+    )
+    .bind(a_id)
+    .bind(q_id)
+    .execute(&db)
+    .await
+    .unwrap();
+
+    // Create rating with PII
+    server
+        .post(&format!("/answers/{}/ratings", a_id))
+        .authorization_bearer(&token)
+        .json(&serde_json::json!({"score": 3, "comment": "private thought", "rater_original_query": "sensitive query"}))
+        .await;
+
+    // Redact
+    let resp = server
+        .put(&format!("/answers/{}/ratings/redact", a_id))
+        .authorization_bearer(&token)
+        .await;
+    resp.assert_status(axum::http::StatusCode::NO_CONTENT);
+
+    // Verify redacted
+    let (comment, query): (Option<String>, Option<String>) = sqlx::query_as(
+        "SELECT comment, rater_original_query FROM ratings WHERE answer_id = $1 AND rater_id = $2",
+    )
+    .bind(a_id)
+    .bind(uid)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert!(comment.is_none());
+    assert!(query.is_none());
+}
+
+#[tokio::test]
+async fn test_question_linking() {
+    let server = setup().await;
+    let (_uid, token) = create_test_user().await;
+
+    let resp1 = server
+        .post("/questions")
+        .authorization_bearer(&token)
+        .json(&serde_json::json!({"title": "Link Source", "body": "src"}))
+        .await;
+    let q1_id = resp1.json::<serde_json::Value>()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let resp2 = server
+        .post("/questions")
+        .authorization_bearer(&token)
+        .json(&serde_json::json!({"title": "Link Target", "body": "tgt"}))
+        .await;
+    let q2_id = resp2.json::<serde_json::Value>()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let resp = server
+        .post(&format!("/questions/{}/link", q1_id))
+        .authorization_bearer(&token)
+        .json(&serde_json::json!({"target_question_id": q2_id, "link_type": "duplicate"}))
+        .await;
+    resp.assert_status(axum::http::StatusCode::CREATED);
+    let body: serde_json::Value = resp.json();
+    assert_eq!(body["link_type"], "duplicate");
+}
+
+#[tokio::test]
+async fn test_dig_deeper_disabled_returns_503() {
+    let server = setup().await;
+    let (uid, token) = create_test_user().await;
+    let (_admin_id, admin_token) = create_admin_user().await;
+    let db = get_db().await;
+
+    // Disable dig deeper
+    server
+        .put("/admin/config")
+        .authorization_bearer(&admin_token)
+        .json(&serde_json::json!({"config": {"dig_deeper_enabled": "false"}}))
+        .await;
+
+    let q_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO questions (id, author_id, title, body, original_query) VALUES ($1, $2, 'Q', 'B', 'Q B')")
+        .bind(q_id).bind(uid).execute(&db).await.unwrap();
+    let a_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO answers (id, question_id, author_type, body) VALUES ($1, $2, 'human', 'ans')",
+    )
+    .bind(a_id)
+    .bind(q_id)
+    .execute(&db)
+    .await
+    .unwrap();
+
+    let resp = server
+        .post(&format!("/answers/{}/dig-deeper", a_id))
+        .authorization_bearer(&token)
+        .json(&serde_json::json!({"prompt": "explain more"}))
+        .await;
+    resp.assert_status(axum::http::StatusCode::SERVICE_UNAVAILABLE);
+}
