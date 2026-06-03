@@ -391,3 +391,179 @@ async fn test_comments_paginated() {
     assert_eq!(body["data"].as_array().unwrap().len(), 2);
     assert_eq!(body["has_more"], true);
 }
+
+#[tokio::test]
+async fn test_rls_tenant_isolation() {
+    let db = get_db().await;
+
+    // RLS doesn't apply to superusers — create app role for testing
+    sqlx::query("DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'distill_app') THEN CREATE ROLE distill_app LOGIN PASSWORD 'distill'; END IF; END $$")
+        .execute(&db).await.unwrap();
+    sqlx::query("GRANT ALL ON ALL TABLES IN SCHEMA public TO distill_app")
+        .execute(&db)
+        .await
+        .unwrap();
+    sqlx::query("GRANT USAGE ON SCHEMA public TO distill_app")
+        .execute(&db)
+        .await
+        .unwrap();
+
+    let tenant_a = Uuid::new_v4();
+    let tenant_b = Uuid::new_v4();
+    let user_a = Uuid::new_v4();
+
+    // Insert as superuser (bypasses RLS)
+    sqlx::query("INSERT INTO users (id, tenant_id, provider, provider_id, display_name) VALUES ($1, $2, 'test', $3, 'A')")
+        .bind(user_a).bind(tenant_a).bind(user_a.to_string()).execute(&db).await.unwrap();
+
+    let q_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO questions (id, tenant_id, author_id, title, body, original_query) VALUES ($1, $2, $3, 'Secret', 'Body', 'Secret Body')")
+        .bind(q_id).bind(tenant_a).bind(user_a).execute(&db).await.unwrap();
+
+    // Connect as app user (RLS applies)
+    let app_db = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect("postgres://distill_app:distill@localhost:5432/distill")
+        .await
+        .unwrap();
+
+    // As tenant B — should NOT see tenant A's question
+    let mut conn = app_db.acquire().await.unwrap();
+    sqlx::query("SELECT set_config('app.current_tenant', $1::text, false)")
+        .bind(tenant_b.to_string())
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    let result: Option<(Uuid,)> = sqlx::query_as("SELECT id FROM questions WHERE id = $1")
+        .bind(q_id)
+        .fetch_optional(&mut *conn)
+        .await
+        .unwrap();
+    assert!(
+        result.is_none(),
+        "tenant B should not see tenant A's question"
+    );
+
+    // As tenant A — should see it
+    sqlx::query("SELECT set_config('app.current_tenant', $1::text, false)")
+        .bind(tenant_a.to_string())
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    let result: Option<(Uuid,)> = sqlx::query_as("SELECT id FROM questions WHERE id = $1")
+        .bind(q_id)
+        .fetch_optional(&mut *conn)
+        .await
+        .unwrap();
+    assert!(result.is_some(), "tenant A should see own question");
+}
+
+#[tokio::test]
+async fn test_search_hybrid_vs_keyword() {
+    let server = setup().await;
+    let (_uid, token) = create_test_user().await;
+
+    // Insert questions with distinct keywords
+    server.post("/questions").authorization_bearer(&token)
+        .json(&serde_json::json!({"title": "PostgreSQL indexing strategies", "body": "BTREE GIN GiST BRIN"}))
+        .await;
+    server
+        .post("/questions")
+        .authorization_bearer(&token)
+        .json(&serde_json::json!({"title": "Redis caching patterns", "body": "TTL eviction LRU"}))
+        .await;
+
+    // Search should find postgres question by keyword
+    let resp = server.get("/questions/search?q=postgresql+indexing").await;
+    resp.assert_status_ok();
+    let results: Vec<serde_json::Value> = resp.json();
+    assert!(!results.is_empty());
+    assert!(results[0]["title"].as_str().unwrap().contains("PostgreSQL"));
+
+    // Should NOT find redis when searching for postgres
+    assert!(!results
+        .iter()
+        .any(|r| r["title"].as_str().unwrap().contains("Redis")));
+}
+
+#[tokio::test]
+async fn test_search_tag_filter() {
+    let server = setup().await;
+    let (_uid, token) = create_test_user().await;
+
+    server.post("/questions").authorization_bearer(&token)
+        .json(&serde_json::json!({"title": "Axum middleware", "body": "tower layers", "tags": ["rust", "web"]}))
+        .await;
+    server.post("/questions").authorization_bearer(&token)
+        .json(&serde_json::json!({"title": "Axum extractors", "body": "custom extractors", "tags": ["rust", "api"]}))
+        .await;
+
+    // Filter by tag=api should only return extractors
+    let resp = server.get("/questions/search?q=axum&tags=api").await;
+    resp.assert_status_ok();
+    let results: Vec<serde_json::Value> = resp.json();
+    assert!(results.iter().all(|r| r["tags"]
+        .as_array()
+        .unwrap()
+        .contains(&serde_json::json!("api"))));
+}
+
+#[tokio::test]
+async fn test_job_queue_lifecycle() {
+    let db = get_db().await;
+
+    // Enqueue a job
+    let job_id = distill_server::jobs::enqueue(
+        &db,
+        &distill_server::jobs::JobPayload::GenerateEmbedding {
+            question_id: Uuid::new_v4(),
+            text: "test".to_string(),
+            model: "nonexistent-model".to_string(),
+        },
+    )
+    .await
+    .unwrap();
+
+    // Verify it's pending
+    let status: String = sqlx::query_scalar("SELECT status FROM jobs WHERE id = $1")
+        .bind(job_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    assert_eq!(status, "pending");
+
+    // Process — will fail (no real LLM)
+    distill_server::jobs::process_pending(&db).await;
+
+    // Should be back to pending with backoff (attempt 1 < max_attempts 3)
+    let (status, attempts): (String, i32) =
+        sqlx::query_as("SELECT status, attempts FROM jobs WHERE id = $1")
+            .bind(job_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+    assert_eq!(status, "pending");
+    assert_eq!(attempts, 1);
+
+    // Process 2 more times to exhaust retries
+    // Set next_attempt_at to now to bypass backoff for test
+    sqlx::query("UPDATE jobs SET next_attempt_at = now() WHERE id = $1")
+        .bind(job_id)
+        .execute(&db)
+        .await
+        .unwrap();
+    distill_server::jobs::process_pending(&db).await;
+    sqlx::query("UPDATE jobs SET next_attempt_at = now() WHERE id = $1")
+        .bind(job_id)
+        .execute(&db)
+        .await
+        .unwrap();
+    distill_server::jobs::process_pending(&db).await;
+
+    let status: String = sqlx::query_scalar("SELECT status FROM jobs WHERE id = $1")
+        .bind(job_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    assert_eq!(status, "failed");
+}
