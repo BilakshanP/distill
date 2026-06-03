@@ -119,6 +119,67 @@ pub async fn get_graph(
         });
     }
 
+    // Topic nodes from tags — creates clusters around shared topics
+    let tags = sqlx::query_as::<_, (String, i64)>(
+        "SELECT UNNEST(tags) AS tag, COUNT(*) AS cnt FROM questions GROUP BY tag ORDER BY cnt DESC LIMIT 50",
+    )
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    for (tag, cnt) in &tags {
+        let tag_id = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_URL, tag.as_bytes());
+        nodes.push(GraphNode {
+            id: tag_id,
+            node_type: "topic".into(),
+            label: tag.clone(),
+            size: *cnt,
+        });
+    }
+
+    // Tag edges: question -> topic
+    for q in &questions {
+        let q_tags: Vec<String> =
+            sqlx::query_scalar("SELECT UNNEST(tags) FROM questions WHERE id = $1")
+                .bind(q.0)
+                .fetch_all(&state.db)
+                .await
+                .unwrap_or_default();
+        for tag in q_tags {
+            let tag_id = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_URL, tag.as_bytes());
+            edges.push(GraphEdge {
+                source: q.0,
+                target: tag_id,
+                edge_type: "tagged".into(),
+                weight: 1.0,
+            });
+        }
+    }
+
+    // Similarity edges between questions (vector-based, top pairs)
+    let similar = sqlx::query_as::<_, (Uuid, Uuid, f64)>(
+        r#"SELECT q1.id, q2.id, 1 - (q1.embedding <=> q2.embedding) AS similarity
+           FROM questions q1, questions q2
+           WHERE q1.id < q2.id
+             AND q1.embedding IS NOT NULL AND q2.embedding IS NOT NULL
+             AND q1.id = ANY($1) AND q2.id = ANY($1)
+             AND (1 - (q1.embedding <=> q2.embedding)) > 0.7
+           ORDER BY similarity DESC LIMIT 50"#,
+    )
+    .bind(questions.iter().map(|q| q.0).collect::<Vec<_>>())
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    for s in &similar {
+        edges.push(GraphEdge {
+            source: s.0,
+            target: s.1,
+            edge_type: "similar".into(),
+            weight: s.2,
+        });
+    }
+
     Ok(Json(GraphResponse { nodes, edges }))
 }
 

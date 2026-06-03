@@ -14,7 +14,7 @@ When someone asks a question, Distill:
 6. Lets users rate answers with full transparency (rater's context visible publicly)
 7. Detects contradictions between answers and flags them for review
 8. Allows users to "dig deeper" on any answer via LLM
-9. Visualizes knowledge as an interactive graph
+9. Visualizes knowledge relationships as a graph (topics, similarity, contradictions)
 
 ## Quick Start
 
