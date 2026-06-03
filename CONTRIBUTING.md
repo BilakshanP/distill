@@ -95,3 +95,7 @@ New endpoints must also be registered in:
 3. `tags(...)` if introducing a new tag group
 
 Swagger UI is available at `/swagger-ui` in debug builds. Verify your annotations render correctly before submitting.
+
+## Future Work
+
+See [docs/TODO.md](docs/TODO.md) for planned improvements and when to tackle them.
