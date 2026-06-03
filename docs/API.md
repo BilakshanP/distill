@@ -5,54 +5,6 @@
 All endpoints marked **Auth** require a `Authorization: Bearer <token>` header.
 Endpoints marked **Admin** require the user to have `role=admin`.
 
-## Route Map
-
-```mermaid
-graph LR
-    subgraph Public
-        GET_Q[GET /questions]
-        GET_QID[GET /questions/:id]
-        SEARCH[GET /questions/search]
-        GET_A[GET /questions/:id/answers]
-        GET_H[GET /answers/:id/history]
-        GET_R[GET /answers/:id/ratings]
-        GET_C[GET /answers/:id/contradictions]
-        GET_DD[GET /answers/:id/deep-dives]
-        GET_QC[GET /questions/:id/comments]
-        GET_AC[GET /answers/:id/comments]
-        TAGS[GET /tags]
-        GRAPH[GET /graph]
-        NODE[GET /graph/node/:id]
-    end
-
-    subgraph Auth Required
-        POST_Q[POST /questions]
-        PREVIEW[POST /questions/preview]
-        LINK[POST /questions/:id/link]
-        EDIT[PUT /answers/:id]
-        STALE[POST /answers/:id/mark-stale]
-        DIG[POST /answers/:id/dig-deeper]
-        RATE[POST /answers/:id/ratings]
-        REDACT[PUT /answers/:id/ratings/redact]
-        FLAG[POST /answers/:id/flag-contradiction]
-        CMT_Q[POST /questions/:id/comments]
-        CMT_A[POST /answers/:id/comments]
-        DEL[DELETE /me]
-    end
-
-    subgraph Admin Only
-        CFG_GET[GET /admin/config]
-        CFG_PUT[PUT /admin/config]
-        CONTRA[GET /admin/contradictions]
-        QUOTA[PUT /admin/user-quota]
-        REEMB[POST /admin/re-embed]
-        PROMOTE[PUT /admin/users/:id/promote]
-        TENANTS[POST/GET /admin/tenants]
-        ASSIGN[PUT /admin/tenants/assign]
-        JOBS[GET /admin/jobs]
-    end
-```
-
 ## Endpoints
 
 ### Health
