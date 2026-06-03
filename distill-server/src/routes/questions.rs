@@ -512,16 +512,15 @@ pub async fn list_questions(
 pub async fn get_question(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-) -> Result<Json<QuestionResponse>, StatusCode> {
+) -> Result<Json<QuestionResponse>, crate::error::AppError> {
     let row = sqlx::query_as::<_, QuestionListRow>(
         r#"SELECT id, author_id, title, body, original_query, tags, metadata, status, embedding IS NOT NULL AS has_embedding, created_at
            FROM questions WHERE id = $1"#,
     )
     .bind(id)
     .fetch_optional(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .ok_or(StatusCode::NOT_FOUND)?;
+    .await?
+    .ok_or(crate::error::AppError::NotFound("question not found"))?;
 
     Ok(Json(QuestionResponse {
         id: row.id,

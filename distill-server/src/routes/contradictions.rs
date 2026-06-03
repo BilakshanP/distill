@@ -58,7 +58,7 @@ pub async fn flag_contradiction(
     Path(answer_id): Path<Uuid>,
     auth: AuthUser,
     Json(req): Json<FlagContradictionRequest>,
-) -> Result<(StatusCode, Json<ContradictionResponse>), StatusCode> {
+) -> Result<(StatusCode, Json<ContradictionResponse>), crate::error::AppError> {
     let row = sqlx::query_as::<_, ContradictionRow>(
         r#"INSERT INTO contradiction_flags (answer_id_a, answer_id_b, explanation, source, flagged_by)
            VALUES ($1, $2, $3, 'user', $4)
@@ -70,9 +70,8 @@ pub async fn flag_contradiction(
     .bind(&req.explanation)
     .bind(auth.user_id)
     .fetch_optional(&state.db)
-    .await
-    .map_err(|e| { tracing::error!("flag contradiction failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?
-    .ok_or(StatusCode::CONFLICT)?;
+    .await?
+    .ok_or(crate::error::AppError::Conflict("contradiction already flagged"))?;
 
     Ok((StatusCode::CREATED, Json(row.into())))
 }
