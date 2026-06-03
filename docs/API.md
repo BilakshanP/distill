@@ -83,6 +83,8 @@ Endpoints marked **Admin** require the user to have `role=admin`.
 | GET | `/admin/contradictions?limit=&after=` | Admin | Contradiction review queue (paginated) |
 | GET | `/admin/config` | Admin | Get deployment config |
 | PUT | `/admin/config` | Admin | Update deployment config |
+| PUT | `/admin/user-quota` | Admin | Set per-user LLM monthly quota |
+| POST | `/admin/re-embed` | Admin | Re-embed all questions with outdated embedding version |
 
 ## Pagination
 
