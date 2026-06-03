@@ -24,23 +24,65 @@ async fn do_generate(
     use genai::chat::{ChatMessage, ChatRequest};
 
     let query_text = format!("{} {}", title, body);
-    let context_rows = sqlx::query_as::<_, (String, String, String)>(
-        r#"WITH bm25 AS (
-             SELECT q.id, q.title, q.body, ts_rank(q.tsv, websearch_to_tsquery('english', $1)) AS score
-             FROM questions q WHERE q.tsv @@ websearch_to_tsquery('english', $1) AND q.id != $2
-             ORDER BY score DESC LIMIT 10
-           ),
-           answered AS (
-             SELECT b.title AS qt, b.body AS qb, a.body AS ab,
-                    ROW_NUMBER() OVER (PARTITION BY b.id ORDER BY a.created_at DESC) AS rn
-             FROM bm25 b JOIN answers a ON a.question_id = b.id
-           )
-           SELECT qt, qb, ab FROM answered WHERE rn = 1 LIMIT 5"#,
-    )
-    .bind(&query_text)
-    .bind(question_id)
-    .fetch_all(db)
-    .await?;
+
+    // Try to get the question's embedding for vector search
+    let embedding: Option<pgvector::Vector> =
+        sqlx::query_scalar("SELECT embedding FROM questions WHERE id = $1")
+            .bind(question_id)
+            .fetch_optional(db)
+            .await?
+            .flatten();
+
+    // Full hybrid RRF retrieval (BM25 + vector when embedding available)
+    let context_rows = if let Some(emb) = &embedding {
+        sqlx::query_as::<_, (String, String, String)>(
+            r#"WITH fts AS (
+                 SELECT id, ROW_NUMBER() OVER (ORDER BY ts_rank(tsv, websearch_to_tsquery('english', $1)) DESC) AS rn
+                 FROM questions WHERE tsv @@ websearch_to_tsquery('english', $1) AND id != $3 LIMIT 20
+               ),
+               vec AS (
+                 SELECT id, ROW_NUMBER() OVER (ORDER BY embedding <=> $2) AS rn
+                 FROM questions WHERE embedding IS NOT NULL AND id != $3 LIMIT 20
+               ),
+               rrf AS (
+                 SELECT COALESCE(fts.id, vec.id) AS id,
+                        (COALESCE(1.0/(60.0+fts.rn), 0.0) + COALESCE(1.0/(60.0+vec.rn), 0.0))::float8 AS score
+                 FROM fts FULL OUTER JOIN vec ON fts.id = vec.id
+               ),
+               answered AS (
+                 SELECT q.title AS qt, q.body AS qb, a.body AS ab,
+                        ROW_NUMBER() OVER (PARTITION BY q.id ORDER BY a.created_at DESC) AS rn
+                 FROM rrf JOIN questions q ON q.id = rrf.id
+                 JOIN answers a ON a.question_id = q.id
+                 ORDER BY rrf.score DESC
+               )
+               SELECT qt, qb, ab FROM answered WHERE rn = 1 LIMIT 5"#,
+        )
+        .bind(&query_text)
+        .bind(emb)
+        .bind(question_id)
+        .fetch_all(db)
+        .await?
+    } else {
+        // Fallback: BM25 only
+        sqlx::query_as::<_, (String, String, String)>(
+            r#"WITH bm25 AS (
+                 SELECT q.id, q.title, q.body
+                 FROM questions q WHERE q.tsv @@ websearch_to_tsquery('english', $1) AND q.id != $2
+                 ORDER BY ts_rank(q.tsv, websearch_to_tsquery('english', $1)) DESC LIMIT 10
+               ),
+               answered AS (
+                 SELECT b.title AS qt, b.body AS qb, a.body AS ab,
+                        ROW_NUMBER() OVER (PARTITION BY b.id ORDER BY a.created_at DESC) AS rn
+                 FROM bm25 b JOIN answers a ON a.question_id = b.id
+               )
+               SELECT qt, qb, ab FROM answered WHERE rn = 1 LIMIT 5"#,
+        )
+        .bind(&query_text)
+        .bind(question_id)
+        .fetch_all(db)
+        .await?
+    };
 
     let mut context = String::new();
     for (qt, qb, ab) in &context_rows {
