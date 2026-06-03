@@ -191,16 +191,6 @@ pub async fn get_answers(
     ))
 }
 
-pub async fn generate_ai_answer(
-    db: &sqlx::PgPool,
-    chat_model: &str,
-    question_id: Uuid,
-    title: &str,
-    body: &str,
-) {
-    crate::services::answers::generate_ai_answer(db, chat_model, question_id, title, body).await;
-}
-
 #[derive(Deserialize, ToSchema)]
 pub struct MarkStaleRequest {
     pub reason: Option<String>,
@@ -235,17 +225,23 @@ pub async fn mark_stale(
             .unwrap_or(false)
             && crate::routes::is_llm_feature_enabled(&config, "llm_features_enabled")
         {
-            let db = state.db.clone();
-            let model = chat_model.clone();
-            let answer_id = id;
-            let body = row.4.clone();
-            let reason = req.reason.clone().unwrap_or_default();
-
-            tokio::spawn(async move {
-                if let Err(e) = resolve_stale(&db, &model, answer_id, &body, &reason).await {
-                    tracing::error!("stale auto-resolve failed for {}: {:?}", answer_id, e);
-                }
-            });
+            let question_id = row.1;
+            let title: String = sqlx::query_scalar("SELECT title FROM questions WHERE id = $1")
+                .bind(question_id)
+                .fetch_one(&state.db)
+                .await
+                .unwrap_or_default();
+            let _ = crate::jobs::enqueue(
+                &state.db,
+                &crate::jobs::JobPayload::ResolveStale {
+                    question_id,
+                    title,
+                    old_body: row.4.clone(),
+                    reason: req.reason.clone().unwrap_or_default(),
+                    model: chat_model.clone(),
+                },
+            )
+            .await;
         }
     }
 
@@ -454,32 +450,4 @@ pub async fn get_deep_dives(
         next_cursor,
         has_more,
     }))
-}
-
-async fn resolve_stale(
-    db: &sqlx::PgPool,
-    chat_model: &str,
-    answer_id: uuid::Uuid,
-    old_body: &str,
-    stale_reason: &str,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let question_id: (uuid::Uuid,) =
-        sqlx::query_as("SELECT question_id FROM answers WHERE id = $1")
-            .bind(answer_id)
-            .fetch_one(db)
-            .await?;
-    let q_row: (String, String) = sqlx::query_as("SELECT title, body FROM questions WHERE id = $1")
-        .bind(question_id.0)
-        .fetch_one(db)
-        .await?;
-    crate::services::answers::resolve_stale(
-        db,
-        chat_model,
-        question_id.0,
-        &q_row.0,
-        old_body,
-        stale_reason,
-    )
-    .await;
-    Ok(())
 }

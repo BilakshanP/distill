@@ -101,16 +101,15 @@ pub async fn create_question(
 
     // Optionally generate embedding in background
     if let Some(model) = &state.llm_embedding_model {
-        let db = state.db.clone();
-        let model = model.clone();
-        let text = original_query.clone();
-        let question_id = row.0;
-
-        tokio::spawn(async move {
-            if let Err(e) = generate_embedding(&db, &model, question_id, &text).await {
-                tracing::error!("embedding generation failed for {}: {}", question_id, e);
-            }
-        });
+        let _ = crate::jobs::enqueue(
+            &state.db,
+            &crate::jobs::JobPayload::GenerateEmbedding {
+                question_id: row.0,
+                text: original_query.clone(),
+                model: model.clone(),
+            },
+        )
+        .await;
     }
 
     // Generate AI answer in background (respects answer_mode config)
@@ -123,22 +122,16 @@ pub async fn create_question(
         if answer_mode != "community-only"
             && crate::routes::llm_cache::check_budget(&state.db, &config).await
         {
-            let db = state.db.clone();
-            let chat_model = chat_model.clone();
-            let question_id = row.0;
-            let title = req.title.clone();
-            let body = req.body.clone();
-
-            tokio::spawn(async move {
-                crate::routes::answers::generate_ai_answer(
-                    &db,
-                    &chat_model,
-                    question_id,
-                    &title,
-                    &body,
-                )
-                .await;
-            });
+            let _ = crate::jobs::enqueue(
+                &state.db,
+                &crate::jobs::JobPayload::GenerateAiAnswer {
+                    question_id: row.0,
+                    title: req.title.clone(),
+                    body: req.body.clone(),
+                    model: chat_model.clone(),
+                },
+            )
+            .await;
         }
     }
 
@@ -552,13 +545,4 @@ pub async fn get_question(
         has_embedding: row.has_embedding,
         created_at: row.created_at,
     }))
-}
-
-async fn generate_embedding(
-    db: &sqlx::PgPool,
-    model: &str,
-    question_id: Uuid,
-    text: &str,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    crate::services::questions::generate_embedding(db, model, question_id, text).await
 }

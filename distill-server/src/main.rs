@@ -40,7 +40,10 @@ async fn main() {
         tracing::warn!("⚠️  LLM models not fully configured — AI features disabled (set LLM_CHAT_MODEL and LLM_EMBEDDING_MODEL)");
     }
 
-    let app = build_router(state);
+    let app = build_router(state.clone());
+
+    // Start background job worker
+    distill_server::jobs::spawn_worker(state.db.clone());
 
     let addr = format!("{}:{}", cfg.host, cfg.port);
     tracing::info!("listening on {}", addr);
