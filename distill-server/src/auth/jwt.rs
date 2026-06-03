@@ -6,12 +6,22 @@ use uuid::Uuid;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
     pub sub: Uuid,
+    pub tenant_id: Option<Uuid>,
     pub exp: i64,
 }
 
 pub fn create_token(user_id: Uuid, secret: &str) -> Result<String, jsonwebtoken::errors::Error> {
+    create_token_with_tenant(user_id, None, secret)
+}
+
+pub fn create_token_with_tenant(
+    user_id: Uuid,
+    tenant_id: Option<Uuid>,
+    secret: &str,
+) -> Result<String, jsonwebtoken::errors::Error> {
     let claims = Claims {
         sub: user_id,
+        tenant_id,
         exp: (Utc::now() + Duration::days(7)).timestamp(),
     };
     encode(

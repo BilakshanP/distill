@@ -74,3 +74,15 @@ pub fn decode_cursor(cursor: &str) -> Option<(chrono::DateTime<chrono::Utc>, uui
     let id = parts.next()?.parse::<uuid::Uuid>().ok()?;
     Some((ts, id))
 }
+
+/// Set the current tenant for RLS policies on a connection.
+/// Call this before queries when multi-tenant mode is active.
+pub async fn set_tenant(db: &sqlx::PgPool, tenant_id: uuid::Uuid) {
+    let _: Option<String> =
+        sqlx::query_scalar("SELECT set_config('app.current_tenant', $1::text, true)")
+            .bind(tenant_id.to_string())
+            .fetch_optional(db)
+            .await
+            .ok()
+            .flatten();
+}
