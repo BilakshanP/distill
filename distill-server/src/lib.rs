@@ -22,6 +22,11 @@ use auth::middleware::AuthUser;
 #[cfg(debug_assertions)]
 #[derive(OpenApi)]
 #[openapi(
+    info(
+        title = "Distill API",
+        version = "0.3.0",
+        license(name = "MIT OR Apache-2.0", url = "https://opensource.org/licenses/MIT")
+    ),
     paths(
         routes::questions::create_question,
         routes::questions::get_question,
