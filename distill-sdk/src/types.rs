@@ -19,7 +19,7 @@ pub struct QuestionResponse {
     pub metadata: serde_json::Value,
     pub status: String,
     pub has_embedding: bool,
-    pub created_at: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -29,7 +29,7 @@ pub struct SearchResult {
     pub body: String,
     pub tags: Vec<String>,
     pub score: f64,
-    pub created_at: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -46,7 +46,7 @@ pub struct AnswerResponse {
     pub author_type: String,
     pub body: String,
     pub is_stale: bool,
-    pub created_at: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -59,7 +59,7 @@ pub struct RatingResponse {
     pub comment: Option<String>,
     pub tags: Vec<String>,
     pub rater_original_query: Option<String>,
-    pub created_at: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -75,7 +75,7 @@ pub struct DigDeeperResponse {
     pub answer_id: Uuid,
     pub prompt: String,
     pub response: String,
-    pub created_at: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -106,7 +106,7 @@ pub struct EditHistoryEntry {
     pub editor_id: Uuid,
     pub diff: String,
     pub edit_message: Option<String>,
-    pub created_at: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -118,7 +118,7 @@ pub struct ContradictionResponse {
     pub source: String,
     pub flagged_by: Option<Uuid>,
     pub status: String,
-    pub detected_at: String,
+    pub detected_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -133,7 +133,7 @@ pub struct LinkResponse {
     pub question_id_a: Uuid,
     pub question_id_b: Uuid,
     pub link_type: String,
-    pub created_at: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -141,7 +141,7 @@ pub struct CommentResponse {
     pub id: Uuid,
     pub author_id: Uuid,
     pub body: String,
-    pub created_at: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -159,7 +159,7 @@ pub struct TenantResponse {
     pub id: uuid::Uuid,
     pub name: String,
     pub slug: String,
-    pub created_at: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -170,7 +170,7 @@ pub struct JobResponse {
     pub attempts: i32,
     pub max_attempts: i32,
     pub error: Option<String>,
-    pub created_at: String,
-    pub started_at: Option<String>,
-    pub completed_at: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub started_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
 }
