@@ -168,14 +168,37 @@ async fn do_detect(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use genai::chat::{ChatMessage, ChatRequest};
 
-    // Prefilter: compare only top-5 answers (most recent, same question)
-    let other_answers = sqlx::query_as::<_, (Uuid, String)>(
-        "SELECT id, body FROM answers WHERE question_id = $1 AND id != $2 ORDER BY created_at DESC LIMIT 5",
-    )
-    .bind(question_id)
-    .bind(answer_id)
-    .fetch_all(db)
-    .await?;
+    // Semantic prefilter: find candidate answers via embedding similarity of parent questions
+    let question_embedding: Option<pgvector::Vector> =
+        sqlx::query_scalar("SELECT embedding FROM questions WHERE id = $1")
+            .bind(question_id)
+            .fetch_optional(db)
+            .await?
+            .flatten();
+
+    let other_answers = if let Some(emb) = question_embedding {
+        // Find answers to the most semantically similar questions
+        sqlx::query_as::<_, (Uuid, String)>(
+            r#"SELECT a.id, a.body FROM answers a
+               JOIN questions q ON q.id = a.question_id
+               WHERE a.id != $1 AND q.embedding IS NOT NULL
+               ORDER BY q.embedding <=> $2
+               LIMIT 5"#,
+        )
+        .bind(answer_id)
+        .bind(emb)
+        .fetch_all(db)
+        .await?
+    } else {
+        // Fallback: same-question answers
+        sqlx::query_as::<_, (Uuid, String)>(
+            "SELECT id, body FROM answers WHERE question_id = $1 AND id != $2 ORDER BY created_at DESC LIMIT 5",
+        )
+        .bind(question_id)
+        .bind(answer_id)
+        .fetch_all(db)
+        .await?
+    };
 
     if other_answers.is_empty() {
         return Ok(());
