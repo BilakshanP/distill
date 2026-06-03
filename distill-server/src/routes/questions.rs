@@ -328,11 +328,22 @@ pub struct SearchResult {
 pub async fn search_questions(
     State(state): State<AppState>,
     Query(params): Query<SearchParams>,
-) -> Result<Json<Vec<SearchResult>>, StatusCode> {
+) -> Result<(axum::http::HeaderMap, Json<Vec<SearchResult>>), StatusCode> {
     let limit = params.limit.min(100);
-    let k: f64 = 60.0;
 
     let config = crate::routes::get_config_map(&state.db).await;
+    let k: f64 = config
+        .get("rrf_k")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(60.0);
+    let w_bm25: f64 = config
+        .get("rrf_weight_bm25")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1.0);
+    let w_vec: f64 = config
+        .get("rrf_weight_vector")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1.0);
     let search_mode = config
         .get("search_mode")
         .map(|s| s.as_str())
@@ -380,12 +391,12 @@ pub async fn search_questions(
                 SELECT id, 1 - (embedding <=> $2) AS rank,
                        ROW_NUMBER() OVER (ORDER BY embedding <=> $2) AS rn
                 FROM questions
-                WHERE embedding IS NOT NULL AND embedding_model = $6
+                WHERE embedding IS NOT NULL AND embedding_model = $8
                 LIMIT 100
             ),
             rrf AS (
                 SELECT COALESCE(fts.id, vec.id) AS id,
-                       (COALESCE(1.0 / ($3 + fts.rn), 0.0) + COALESCE(1.0 / ($3 + vec.rn), 0.0))::float8 AS score
+                       ($6 * COALESCE(1.0 / ($3 + fts.rn), 0.0) + $7 * COALESCE(1.0 / ($3 + vec.rn), 0.0))::float8 AS score
                 FROM fts FULL OUTER JOIN vec ON fts.id = vec.id
             )
             SELECT q.id, q.title, q.body, q.tags, rrf.score, q.created_at
@@ -400,6 +411,8 @@ pub async fn search_questions(
         .bind(k)
         .bind(limit)
         .bind(params.offset)
+        .bind(w_bm25)
+        .bind(w_vec)
         .bind(state.llm_embedding_model.as_deref().unwrap_or(""))
         .fetch_all(&state.db)
         .await
@@ -453,18 +466,31 @@ pub async fn search_questions(
         })?
     };
 
-    Ok(Json(
-        results
-            .into_iter()
-            .map(|r| SearchResult {
-                id: r.id,
-                title: r.title,
-                body: r.body,
-                tags: r.tags,
-                score: r.score,
-                created_at: r.created_at,
-            })
-            .collect(),
+    let mode_used =
+        if !results.is_empty() && search_mode == "hybrid" && state.llm_embedding_model.is_some() {
+            "hybrid"
+        } else {
+            "keyword"
+        };
+
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert("X-Search-Mode", mode_used.parse().unwrap());
+
+    Ok((
+        headers,
+        Json(
+            results
+                .into_iter()
+                .map(|r| SearchResult {
+                    id: r.id,
+                    title: r.title,
+                    body: r.body,
+                    tags: r.tags,
+                    score: r.score,
+                    created_at: r.created_at,
+                })
+                .collect(),
+        ),
     ))
 }
 

@@ -2,6 +2,15 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+fn rand_jitter() -> f64 {
+    // Simple pseudo-random 0.0..1.0 using time nanos
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .subsec_nanos();
+    (nanos % 1000) as f64 / 1000.0
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum JobPayload {
@@ -79,8 +88,10 @@ pub async fn process_pending(db: &PgPool) {
                 } else {
                     "pending"
                 };
-                // Exponential backoff: 4s, 16s, 64s, ...
-                let backoff_secs = 4i64.pow(attempts as u32);
+                // Exponential backoff: base 2 with jitter, capped at 60s
+                let base = 2i64.pow(attempts as u32).min(60);
+                let jitter = (base as f64 * 0.5 * rand_jitter()) as i64;
+                let backoff_secs = base + jitter;
                 sqlx::query("UPDATE jobs SET status = $1, error = $2, next_attempt_at = now() + make_interval(secs => $4) WHERE id = $3")
                     .bind(new_status)
                     .bind(e.to_string())

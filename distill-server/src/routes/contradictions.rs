@@ -230,7 +230,7 @@ async fn do_detect(
             cached
         } else {
             let chat_req = ChatRequest::new(vec![
-                ChatMessage::system("You are a contradiction detector. Compare two answers and determine if they contradict each other. Reply ONLY with 'NO' if they don't contradict, or a brief explanation of the contradiction if they do."),
+                ChatMessage::system("You are a contradiction detector. Compare two answers and determine if they contradict each other. Reply with EXACTLY 'NONE' if they don't contradict, or 'CONTRADICTION: <brief explanation>' if they do."),
                 ChatMessage::user(format!("Answer A:\n{}\n\nAnswer B:\n{}", answer_body, other_body)),
             ]);
 
@@ -246,7 +246,8 @@ async fn do_detect(
             result
         };
 
-        if text != "NO" && !text.to_lowercase().starts_with("no") {
+        if text.starts_with("CONTRADICTION:") {
+            let explanation = text.strip_prefix("CONTRADICTION:").unwrap().trim();
             sqlx::query(
                 r#"INSERT INTO contradiction_flags (answer_id_a, answer_id_b, explanation, source)
                    VALUES ($1, $2, $3, 'auto')
@@ -254,7 +255,7 @@ async fn do_detect(
             )
             .bind(answer_id)
             .bind(other_id)
-            .bind(&text)
+            .bind(explanation)
             .execute(db)
             .await?;
 

@@ -70,3 +70,61 @@ Frontend for browsing questions, submitting, viewing the knowledge graph, admin 
 - Log aggregation
 - Health check endpoint already exists (`GET /health`)
 - Metrics/tracing export (OpenTelemetry)
+
+---
+
+## Retrieval Improvements
+
+**Cross-encoder reranker:**
+Add a reranking stage on top-N fused results. Requires a cross-encoder model (e.g., ms-marco-MiniLM). Significant precision improvement for nuanced queries.
+
+**Title-weighted embeddings:**
+Currently `title + body` concatenated equally. Titles are more information-dense for intent matching. Experiment with separate embeddings or prefix-weighting.
+
+**Query understanding layer:**
+Feed the LLM rephrase back into actual retrieval (currently it's only shown to the user). Could also add intent classification and query expansion.
+
+---
+
+## Feedback Loop (Biggest Architectural Gap)
+
+The system currently doesn't learn from usage:
+- Ratings exist but don't influence ranking
+- Query reformulations don't feed back into retrieval
+- No click-through tracking or implicit relevance signals
+
+To close this loop:
+1. Track which results users click/expand
+2. Use ratings as relevance labels for retrieval tuning
+3. Feed successful reformulations back as query expansion candidates
+4. Periodically retrain/recalibrate RRF weights from user signals
+
+---
+
+## Contradiction Detection
+
+**Confidence scores:**
+Ask LLM for a 1-10 confidence score alongside the explanation. Use it to prioritize admin review queue.
+
+**Expanded candidate set:**
+Currently capped at 5 nearest answers. Could miss contradictions with distant-but-related questions. Consider tiered approach: top-5 strict, top-20 opportunistic (lower confidence threshold).
+
+---
+
+## Caching
+
+**Content-normalized hashing:**
+Current cache key includes full body text — any typo fix invalidates cache. Normalize (lowercase, strip whitespace, etc.) before hashing for more robust cache hits.
+
+---
+
+## Eval & Metrics
+
+**Online evaluation:**
+No click-through tracking exists. Add implicit relevance signals (time-on-page, "this helped" buttons) to close the offline/online eval gap.
+
+**Similarity threshold calibration:**
+Graph edge threshold (0.7) is hardcoded. Different models have different score distributions. Should be calibrated per-model using the eval harness.
+
+**Token budget accuracy:**
+`LENGTH(response)` is a rough proxy for tokens. For production accuracy, use the provider's token counting API or tiktoken-equivalent.

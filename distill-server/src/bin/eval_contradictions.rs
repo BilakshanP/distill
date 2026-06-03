@@ -48,13 +48,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let case: EvalCase = serde_json::from_str(&line)?;
 
         let chat_req = ChatRequest::new(vec![
-            ChatMessage::system("You are a contradiction detector. Compare two answers and determine if they contradict each other. Reply ONLY with 'NO' if they don't contradict, or a brief explanation of the contradiction if they do."),
+            ChatMessage::system("You are a contradiction detector. Compare two answers and determine if they contradict each other. Reply with EXACTLY 'NONE' if they don't contradict, or 'CONTRADICTION: <brief explanation>' if they do."),
             ChatMessage::user(format!("Answer A:\n{}\n\nAnswer B:\n{}", case.answer_a, case.answer_b)),
         ]);
 
         let resp = client.exec_chat(&model, chat_req, None).await?;
         let text = resp.first_text().unwrap_or("NO").trim().to_string();
-        let predicted = text != "NO" && !text.to_lowercase().starts_with("no");
+        let predicted = text.starts_with("CONTRADICTION:");
 
         metrics.total += 1;
         match (predicted, case.contradicts) {
