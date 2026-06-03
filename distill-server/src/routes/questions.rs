@@ -468,7 +468,7 @@ pub async fn search_questions(
     ))
 }
 
-#[utoipa::path(get, path = "/questions", responses((status = 200)), tag = "questions")]
+#[utoipa::path(get, path = "/questions", responses((status = 200, description = "Paginated list of questions")), tag = "questions")]
 pub async fn list_questions(
     State(state): State<AppState>,
     Query(params): Query<crate::routes::CursorParams>,

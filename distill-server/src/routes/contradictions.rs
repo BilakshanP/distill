@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::{auth::middleware::AuthUser, AppState};
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct ContradictionResponse {
     pub id: Uuid,
     pub answer_id_a: Uuid,
@@ -53,7 +53,7 @@ pub struct FlagContradictionRequest {
     pub explanation: String,
 }
 
-#[utoipa::path(post, path = "/answers/{id}/flag-contradiction", responses((status = 201)), tag = "contradictions")]
+#[utoipa::path(post, path = "/answers/{id}/flag-contradiction", request_body = FlagContradictionRequest, responses((status = 201, body = ContradictionResponse), (status = 409, description = "Already flagged")), tag = "contradictions")]
 pub async fn flag_contradiction(
     State(state): State<AppState>,
     Path(answer_id): Path<Uuid>,
@@ -77,7 +77,7 @@ pub async fn flag_contradiction(
     Ok((StatusCode::CREATED, Json(row.into())))
 }
 
-#[utoipa::path(get, path = "/answers/{id}/contradictions", responses((status = 200)), tag = "contradictions")]
+#[utoipa::path(get, path = "/answers/{id}/contradictions", responses((status = 200, body = Vec<ContradictionResponse>)), tag = "contradictions")]
 pub async fn get_contradictions_for_answer(
     State(state): State<AppState>,
     Path(answer_id): Path<Uuid>,
@@ -100,7 +100,7 @@ pub async fn get_contradictions_for_answer(
     ))
 }
 
-#[utoipa::path(get, path = "/admin/contradictions", responses((status = 200)), tag = "contradictions")]
+#[utoipa::path(get, path = "/admin/contradictions", responses((status = 200, description = "Paginated pending contradictions")), tag = "contradictions")]
 pub async fn admin_review_queue(
     State(state): State<AppState>,
     _auth: crate::auth::middleware::AdminUser,

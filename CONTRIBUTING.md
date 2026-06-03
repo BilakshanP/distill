@@ -54,3 +54,21 @@ Tests do not depend on GitHub OAuth or any LLM API key — they use direct DB in
 - `distill-server/` — API server (Axum + sqlx + genai)
 - `distill-sdk/` — Typed Rust client SDK
 - `.githooks/` — Git hooks (pre-commit: cargo fmt check)
+
+## Swagger / OpenAPI
+
+Every public endpoint **must** have a full `#[utoipa::path]` annotation including:
+
+- HTTP method and path
+- `request_body = Type` (if applicable)
+- `responses((status = CODE, body = Type))` with response schemas
+- `tag = "section"`
+
+The response/request types must derive `utoipa::ToSchema`.
+
+New endpoints must also be registered in:
+1. `paths(...)` in `lib.rs` `#[openapi(...)]`
+2. `components(schemas(...))` if introducing new types
+3. `tags(...)` if introducing a new tag group
+
+Swagger UI is available at `/swagger-ui` in debug builds. Verify your annotations render correctly before submitting.

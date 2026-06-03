@@ -8,25 +8,25 @@ use uuid::Uuid;
 
 use crate::AppState;
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct GraphResponse {
     pub nodes: Vec<GraphNode>,
     pub edges: Vec<GraphEdge>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct GraphNode {
     pub id: Uuid,
-    pub node_type: String, // "question", "answer", "tag"
+    pub node_type: String,
     pub label: String,
     pub size: i64,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct GraphEdge {
     pub source: Uuid,
     pub target: Uuid,
-    pub edge_type: String, // "has_answer", "similar", "contradicts", "tagged"
+    pub edge_type: String,
     pub weight: f64,
 }
 
@@ -40,7 +40,7 @@ fn default_limit() -> i64 {
     100
 }
 
-#[utoipa::path(get, path = "/graph", responses((status = 200)), tag = "graph")]
+#[utoipa::path(get, path = "/graph", responses((status = 200, body = GraphResponse)), tag = "graph")]
 pub async fn get_graph(
     State(state): State<AppState>,
     Query(params): Query<GraphParams>,
@@ -184,7 +184,7 @@ pub async fn get_graph(
     Ok(Json(GraphResponse { nodes, edges }))
 }
 
-#[utoipa::path(get, path = "/graph/node/{id}", responses((status = 200)), tag = "graph")]
+#[utoipa::path(get, path = "/graph/node/{id}", responses((status = 200, body = GraphResponse), (status = 404)), tag = "graph")]
 pub async fn get_node_neighborhood(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,

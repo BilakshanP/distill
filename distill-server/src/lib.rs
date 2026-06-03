@@ -63,11 +63,20 @@ use auth::middleware::AuthUser;
         routes::answers::DigDeeperResponse,
         routes::ratings::CreateRatingRequest,
         routes::ratings::RatingResponse,
+        routes::contradictions::FlagContradictionRequest,
+        routes::contradictions::ContradictionResponse,
+        routes::graph::GraphResponse,
+        routes::graph::GraphNode,
+        routes::graph::GraphEdge,
+        routes::tags::TagCount,
     )),
     tags(
         (name = "questions", description = "Question endpoints"),
         (name = "answers", description = "Answer endpoints"),
         (name = "ratings", description = "Rating endpoints"),
+        (name = "contradictions", description = "Contradiction detection"),
+        (name = "graph", description = "Knowledge graph"),
+        (name = "tags", description = "Tag endpoints"),
     )
 )]
 struct ApiDoc;
