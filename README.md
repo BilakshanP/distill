@@ -125,15 +125,7 @@ distill/
 
 ## Configuration
 
-All config is via environment variables (see `.env.example`):
-
-- `DATABASE_URL` — PostgreSQL connection string
-- `AUTO_MIGRATE` — Run migrations on boot (true/false)
-- `JWT_SECRET` — Secret for JWT signing
-- `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — OAuth credentials
-- `LLM_CHAT_MODEL` — Model for chat/rephrase/contradiction (e.g., `gemini-2.5-flash`)
-- `LLM_EMBEDDING_MODEL` — Model for embeddings (e.g., `gemini-embedding-001`)
-- Provider API key (`GEMINI_API_KEY`, `OPENAI_API_KEY`, etc.)
+All config is via environment variables — see [`.env.example`](.env.example) for the full list with descriptions.
 
 ## License
 
