@@ -123,3 +123,9 @@ The server enforces rate limiting at 60 requests/minute per IP address. Exceedin
 ## Search Behavior
 
 Search uses hybrid retrieval (BM25 keyword + vector similarity) by default. If the embedding provider is unavailable or times out (5s), search degrades gracefully to keyword-only with no user-facing error. This means search always returns results, though quality may be reduced without vector similarity.
+
+## Preview Endpoint
+
+`POST /questions/preview` performs embedding generation, hybrid retrieval, and an optional LLM rephrase — making it the most expensive endpoint. LLM rephrase results are cached (controlled by `llm_cache_ttl_hours`).
+
+**Client guidance:** Debounce calls to preview (300-500ms recommended). Do not call on every keystroke. The endpoint is designed for "check before submit" usage, not real-time autocomplete.
