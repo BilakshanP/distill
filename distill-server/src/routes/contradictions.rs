@@ -20,6 +20,33 @@ pub struct ContradictionResponse {
     pub detected_at: chrono::DateTime<chrono::Utc>,
 }
 
+#[derive(sqlx::FromRow)]
+struct ContradictionRow {
+    id: Uuid,
+    answer_id_a: Uuid,
+    answer_id_b: Uuid,
+    explanation: String,
+    source: String,
+    flagged_by: Option<Uuid>,
+    status: String,
+    detected_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl From<ContradictionRow> for ContradictionResponse {
+    fn from(r: ContradictionRow) -> Self {
+        Self {
+            id: r.id,
+            answer_id_a: r.answer_id_a,
+            answer_id_b: r.answer_id_b,
+            explanation: r.explanation,
+            source: r.source,
+            flagged_by: r.flagged_by,
+            status: r.status,
+            detected_at: r.detected_at,
+        }
+    }
+}
+
 #[derive(Deserialize)]
 pub struct FlagContradictionRequest {
     pub contradicts_answer_id: Uuid,
@@ -32,7 +59,7 @@ pub async fn flag_contradiction(
     auth: AuthUser,
     Json(req): Json<FlagContradictionRequest>,
 ) -> Result<(StatusCode, Json<ContradictionResponse>), StatusCode> {
-    let row = sqlx::query_as::<_, (Uuid, Uuid, Uuid, String, String, Option<Uuid>, String, chrono::DateTime<chrono::Utc>)>(
+    let row = sqlx::query_as::<_, ContradictionRow>(
         r#"INSERT INTO contradiction_flags (answer_id_a, answer_id_b, explanation, source, flagged_by)
            VALUES ($1, $2, $3, 'user', $4)
            ON CONFLICT (LEAST(answer_id_a, answer_id_b), GREATEST(answer_id_a, answer_id_b)) DO NOTHING
@@ -47,38 +74,14 @@ pub async fn flag_contradiction(
     .map_err(|e| { tracing::error!("flag contradiction failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?
     .ok_or(StatusCode::CONFLICT)?;
 
-    Ok((
-        StatusCode::CREATED,
-        Json(ContradictionResponse {
-            id: row.0,
-            answer_id_a: row.1,
-            answer_id_b: row.2,
-            explanation: row.3,
-            source: row.4,
-            flagged_by: row.5,
-            status: row.6,
-            detected_at: row.7,
-        }),
-    ))
+    Ok((StatusCode::CREATED, Json(row.into())))
 }
 
 pub async fn get_contradictions_for_answer(
     State(state): State<AppState>,
     Path(answer_id): Path<Uuid>,
 ) -> Result<Json<Vec<ContradictionResponse>>, StatusCode> {
-    let rows = sqlx::query_as::<
-        _,
-        (
-            Uuid,
-            Uuid,
-            Uuid,
-            String,
-            String,
-            Option<Uuid>,
-            String,
-            chrono::DateTime<chrono::Utc>,
-        ),
-    >(
+    let rows = sqlx::query_as::<_, ContradictionRow>(
         r#"SELECT id, answer_id_a, answer_id_b, explanation, source, flagged_by, status, detected_at
            FROM contradiction_flags WHERE answer_id_a = $1 OR answer_id_b = $1
            ORDER BY detected_at DESC"#,
@@ -92,18 +95,7 @@ pub async fn get_contradictions_for_answer(
     })?;
 
     Ok(Json(
-        rows.into_iter()
-            .map(|r| ContradictionResponse {
-                id: r.0,
-                answer_id_a: r.1,
-                answer_id_b: r.2,
-                explanation: r.3,
-                source: r.4,
-                flagged_by: r.5,
-                status: r.6,
-                detected_at: r.7,
-            })
-            .collect(),
+        rows.into_iter().map(ContradictionResponse::from).collect(),
     ))
 }
 
@@ -117,7 +109,7 @@ pub async fn admin_review_queue(
 
     let rows = if let Some(ref cursor) = params.after {
         let (ts, cid) = crate::routes::decode_cursor(cursor).ok_or(StatusCode::BAD_REQUEST)?;
-        sqlx::query_as::<_, (Uuid, Uuid, Uuid, String, String, Option<Uuid>, String, chrono::DateTime<chrono::Utc>)>(
+        sqlx::query_as::<_, ContradictionRow>(
             r#"SELECT id, answer_id_a, answer_id_b, explanation, source, flagged_by, status, detected_at
                FROM contradiction_flags WHERE status = 'pending' AND (detected_at, id) > ($1, $2)
                ORDER BY detected_at ASC, id ASC LIMIT $3"#,
@@ -125,7 +117,7 @@ pub async fn admin_review_queue(
         .bind(ts).bind(cid).bind(fetch_limit)
         .fetch_all(&state.db).await
     } else {
-        sqlx::query_as::<_, (Uuid, Uuid, Uuid, String, String, Option<Uuid>, String, chrono::DateTime<chrono::Utc>)>(
+        sqlx::query_as::<_, ContradictionRow>(
             r#"SELECT id, answer_id_a, answer_id_b, explanation, source, flagged_by, status, detected_at
                FROM contradiction_flags WHERE status = 'pending'
                ORDER BY detected_at ASC, id ASC LIMIT $1"#,
@@ -139,25 +131,13 @@ pub async fn admin_review_queue(
     let next_cursor = if has_more {
         items
             .last()
-            .map(|r| crate::routes::encode_cursor(&r.7, &r.0))
+            .map(|r| crate::routes::encode_cursor(&r.detected_at, &r.id))
     } else {
         None
     };
 
     Ok(Json(crate::routes::Paginated {
-        data: items
-            .into_iter()
-            .map(|r| ContradictionResponse {
-                id: r.0,
-                answer_id_a: r.1,
-                answer_id_b: r.2,
-                explanation: r.3,
-                source: r.4,
-                flagged_by: r.5,
-                status: r.6,
-                detected_at: r.7,
-            })
-            .collect(),
+        data: items.into_iter().map(ContradictionResponse::from).collect(),
         next_cursor,
         has_more,
     }))

@@ -23,6 +23,30 @@ fn default_metadata() -> serde_json::Value {
     serde_json::json!({})
 }
 
+#[derive(sqlx::FromRow)]
+struct SearchResultRow {
+    id: Uuid,
+    title: String,
+    body: String,
+    tags: Vec<String>,
+    score: f64,
+    created_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(sqlx::FromRow)]
+struct QuestionListRow {
+    id: Uuid,
+    author_id: Uuid,
+    title: String,
+    body: String,
+    original_query: String,
+    tags: Vec<String>,
+    metadata: serde_json::Value,
+    status: String,
+    has_embedding: bool,
+    created_at: chrono::DateTime<chrono::Utc>,
+}
+
 #[derive(Serialize, ToSchema)]
 pub struct QuestionResponse {
     pub id: Uuid,
@@ -170,7 +194,7 @@ pub async fn preview_question(
     };
 
     let matches = if let Some(embedding) = &query_embedding {
-        sqlx::query_as::<_, (Uuid, String, String, Vec<String>, f64, chrono::DateTime<chrono::Utc>)>(
+        sqlx::query_as::<_, SearchResultRow>(
             r#"
             WITH fts AS (
                 SELECT id, ROW_NUMBER() OVER (ORDER BY ts_rank(tsv, websearch_to_tsquery('english', $1)) DESC) AS rn
@@ -197,7 +221,7 @@ pub async fn preview_question(
         .map_err(|e| { tracing::error!("preview search query failed: {:?}", e); })
         .unwrap_or_default()
     } else {
-        sqlx::query_as::<_, (Uuid, String, String, Vec<String>, f64, chrono::DateTime<chrono::Utc>)>(
+        sqlx::query_as::<_, SearchResultRow>(
             r#"SELECT id, title, body, tags, ts_rank(tsv, websearch_to_tsquery('english', $1))::float8 AS score, created_at
                FROM questions WHERE tsv @@ websearch_to_tsquery('english', $1)
                ORDER BY score DESC LIMIT 5"#,
@@ -260,12 +284,12 @@ pub async fn preview_question(
         matches: matches
             .into_iter()
             .map(|r| SearchResult {
-                id: r.0,
-                title: r.1,
-                body: r.2,
-                tags: r.3,
-                score: r.4,
-                created_at: r.5,
+                id: r.id,
+                title: r.title,
+                body: r.body,
+                tags: r.tags,
+                score: r.score,
+                created_at: r.created_at,
             })
             .collect(),
         rephrased,
@@ -331,7 +355,7 @@ pub async fn search_questions(
 
     let results = if let Some(embedding) = query_embedding {
         // Hybrid search: BM25 + vector with RRF
-        sqlx::query_as::<_, (Uuid, String, String, Vec<String>, f64, chrono::DateTime<chrono::Utc>)>(
+        sqlx::query_as::<_, SearchResultRow>(
             r#"
             WITH fts AS (
                 SELECT id, ts_rank(tsv, websearch_to_tsquery('english', $1)) AS rank,
@@ -379,7 +403,7 @@ pub async fn search_questions(
             .unwrap_or_default();
 
         if tag_filter.is_empty() {
-            sqlx::query_as::<_, (Uuid, String, String, Vec<String>, f64, chrono::DateTime<chrono::Utc>)>(
+            sqlx::query_as::<_, SearchResultRow>(
                 r#"
                 SELECT id, title, body, tags, ts_rank(tsv, websearch_to_tsquery('english', $1))::float8 AS score, created_at
                 FROM questions
@@ -394,7 +418,7 @@ pub async fn search_questions(
             .fetch_all(&state.db)
             .await
         } else {
-            sqlx::query_as::<_, (Uuid, String, String, Vec<String>, f64, chrono::DateTime<chrono::Utc>)>(
+            sqlx::query_as::<_, SearchResultRow>(
                 r#"
                 SELECT id, title, body, tags, ts_rank(tsv, websearch_to_tsquery('english', $1))::float8 AS score, created_at
                 FROM questions
@@ -420,12 +444,12 @@ pub async fn search_questions(
         results
             .into_iter()
             .map(|r| SearchResult {
-                id: r.0,
-                title: r.1,
-                body: r.2,
-                tags: r.3,
-                score: r.4,
-                created_at: r.5,
+                id: r.id,
+                title: r.title,
+                body: r.body,
+                tags: r.tags,
+                score: r.score,
+                created_at: r.created_at,
             })
             .collect(),
     ))
@@ -441,16 +465,16 @@ pub async fn list_questions(
 
     let rows = if let Some(ref cursor) = params.after {
         let (ts, cid) = crate::routes::decode_cursor(cursor).ok_or(StatusCode::BAD_REQUEST)?;
-        sqlx::query_as::<_, (Uuid, Uuid, String, String, String, Vec<String>, serde_json::Value, String, bool, chrono::DateTime<chrono::Utc>)>(
-            r#"SELECT id, author_id, title, body, original_query, tags, metadata, status, embedding IS NOT NULL, created_at
+        sqlx::query_as::<_, QuestionListRow>(
+            r#"SELECT id, author_id, title, body, original_query, tags, metadata, status, embedding IS NOT NULL AS has_embedding, created_at
                FROM questions WHERE (created_at, id) < ($1, $2)
                ORDER BY created_at DESC, id DESC LIMIT $3"#,
         )
         .bind(ts).bind(cid).bind(fetch_limit)
         .fetch_all(&state.db).await
     } else {
-        sqlx::query_as::<_, (Uuid, Uuid, String, String, String, Vec<String>, serde_json::Value, String, bool, chrono::DateTime<chrono::Utc>)>(
-            r#"SELECT id, author_id, title, body, original_query, tags, metadata, status, embedding IS NOT NULL, created_at
+        sqlx::query_as::<_, QuestionListRow>(
+            r#"SELECT id, author_id, title, body, original_query, tags, metadata, status, embedding IS NOT NULL AS has_embedding, created_at
                FROM questions ORDER BY created_at DESC, id DESC LIMIT $1"#,
         )
         .bind(fetch_limit)
@@ -461,22 +485,22 @@ pub async fn list_questions(
     let items: Vec<_> = rows.into_iter().take(limit as usize).collect();
     let next_cursor = items
         .last()
-        .map(|r| crate::routes::encode_cursor(&r.9, &r.0));
+        .map(|r| crate::routes::encode_cursor(&r.created_at, &r.id));
 
     Ok(Json(crate::routes::Paginated {
         data: items
             .into_iter()
             .map(|r| QuestionResponse {
-                id: r.0,
-                author_id: r.1,
-                title: r.2,
-                body: r.3,
-                original_query: r.4,
-                tags: r.5,
-                metadata: r.6,
-                status: r.7,
-                has_embedding: r.8,
-                created_at: r.9,
+                id: r.id,
+                author_id: r.author_id,
+                title: r.title,
+                body: r.body,
+                original_query: r.original_query,
+                tags: r.tags,
+                metadata: r.metadata,
+                status: r.status,
+                has_embedding: r.has_embedding,
+                created_at: r.created_at,
             })
             .collect(),
         next_cursor: if has_more { next_cursor } else { None },
@@ -489,8 +513,8 @@ pub async fn get_question(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<QuestionResponse>, StatusCode> {
-    let row = sqlx::query_as::<_, (Uuid, Uuid, String, String, String, Vec<String>, serde_json::Value, String, bool, chrono::DateTime<chrono::Utc>)>(
-        r#"SELECT id, author_id, title, body, original_query, tags, metadata, status, embedding IS NOT NULL, created_at
+    let row = sqlx::query_as::<_, QuestionListRow>(
+        r#"SELECT id, author_id, title, body, original_query, tags, metadata, status, embedding IS NOT NULL AS has_embedding, created_at
            FROM questions WHERE id = $1"#,
     )
     .bind(id)
@@ -500,16 +524,16 @@ pub async fn get_question(
     .ok_or(StatusCode::NOT_FOUND)?;
 
     Ok(Json(QuestionResponse {
-        id: row.0,
-        author_id: row.1,
-        title: row.2,
-        body: row.3,
-        original_query: row.4,
-        tags: row.5,
-        metadata: row.6,
-        status: row.7,
-        has_embedding: row.8,
-        created_at: row.9,
+        id: row.id,
+        author_id: row.author_id,
+        title: row.title,
+        body: row.body,
+        original_query: row.original_query,
+        tags: row.tags,
+        metadata: row.metadata,
+        status: row.status,
+        has_embedding: row.has_embedding,
+        created_at: row.created_at,
     }))
 }
 
