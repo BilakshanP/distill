@@ -91,3 +91,43 @@ where
         }
     }
 }
+
+/// Check if a user has remaining LLM quota this month.
+/// Returns true if no per-user quota is set, or if usage is within limit.
+pub async fn check_user_quota(db: &PgPool, user_id: uuid::Uuid) -> bool {
+    let quota: Option<i32> =
+        sqlx::query_scalar("SELECT llm_quota_monthly FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_optional(db)
+            .await
+            .ok()
+            .flatten()
+            .flatten();
+
+    let Some(limit) = quota else { return true }; // No quota set = unlimited
+
+    let used: i32 = sqlx::query_scalar(
+        "SELECT request_count FROM user_llm_usage WHERE user_id = $1 AND month = date_trunc('month', now())::date"
+    )
+    .bind(user_id)
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or(0);
+
+    used < limit
+}
+
+/// Increment a user's LLM usage count for this month.
+pub async fn increment_user_usage(db: &PgPool, user_id: uuid::Uuid) {
+    sqlx::query(
+        r#"INSERT INTO user_llm_usage (user_id, month, request_count)
+           VALUES ($1, date_trunc('month', now())::date, 1)
+           ON CONFLICT (user_id, month) DO UPDATE SET request_count = user_llm_usage.request_count + 1"#,
+    )
+    .bind(user_id)
+    .execute(db)
+    .await
+    .ok();
+}

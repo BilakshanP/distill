@@ -286,9 +286,12 @@ pub async fn dig_deeper(
     let config = crate::routes::get_config_map(&state.db).await;
     if !crate::routes::is_llm_feature_enabled(&config, "dig_deeper_enabled")
         || !crate::routes::llm_cache::check_budget(&state.db, &config).await
+        || !crate::routes::llm_cache::check_user_quota(&state.db, auth.user_id).await
     {
         return Err(StatusCode::SERVICE_UNAVAILABLE);
     }
+
+    crate::routes::llm_cache::increment_user_usage(&state.db, auth.user_id).await;
 
     let chat_model = state
         .llm_chat_model

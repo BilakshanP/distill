@@ -52,3 +52,23 @@ pub async fn update_config(
 
     get_config(State(state), _auth).await
 }
+
+#[derive(Deserialize)]
+pub struct SetUserQuotaRequest {
+    pub user_id: uuid::Uuid,
+    pub monthly_quota: Option<i32>, // None = unlimited
+}
+
+pub async fn set_user_quota(
+    State(state): State<AppState>,
+    _auth: AdminUser,
+    Json(req): Json<SetUserQuotaRequest>,
+) -> Result<StatusCode, StatusCode> {
+    sqlx::query("UPDATE users SET llm_quota_monthly = $1 WHERE id = $2")
+        .bind(req.monthly_quota)
+        .bind(req.user_id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(StatusCode::NO_CONTENT)
+}

@@ -197,6 +197,10 @@ pub fn build_router(state: AppState) -> Router {
             "/admin/config",
             get(routes::admin::get_config).put(routes::admin::update_config),
         )
+        .route(
+            "/admin/user-quota",
+            axum::routing::put(routes::admin::set_user_quota),
+        )
         .route("/graph", get(routes::graph::get_graph))
         .route(
             "/graph/node/{id}",
