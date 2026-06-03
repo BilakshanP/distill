@@ -129,3 +129,39 @@ Search uses hybrid retrieval (BM25 keyword + vector similarity) by default. If t
 `POST /questions/preview` performs embedding generation, hybrid retrieval, and an optional LLM rephrase — making it the most expensive endpoint. LLM rephrase results are cached (controlled by `llm_cache_ttl_hours`).
 
 **Client guidance:** Debounce calls to preview (300-500ms recommended). Do not call on every keystroke. The endpoint is designed for "check before submit" usage, not real-time autocomplete.
+
+## Evaluation
+
+Two eval binaries measure retrieval and contradiction quality against labeled datasets.
+
+### Retrieval eval
+
+```bash
+cp docs/fixtures/eval_set.jsonl.example docs/fixtures/eval_set.jsonl
+# Edit: add real question UUIDs as relevant_ids
+
+cargo run --bin eval -- --eval-file docs/fixtures/eval_set.jsonl
+```
+
+Format (JSONL):
+```json
+{"query": "how do rust lifetimes work", "relevant_ids": ["uuid-of-expected-question", ...]}
+```
+
+Reports: Precision@5, MRR.
+
+### Contradiction eval
+
+```bash
+cp docs/fixtures/contradiction_eval.jsonl.example docs/fixtures/contradiction_eval.jsonl
+# Edit: add real answer pairs with ground truth
+
+cargo run --bin eval_contradictions -- --eval-file docs/fixtures/contradiction_eval.jsonl
+```
+
+Format (JSONL):
+```json
+{"answer_a": "...", "answer_b": "...", "contradicts": true}
+```
+
+Reports: Precision, Recall, F1, Accuracy.

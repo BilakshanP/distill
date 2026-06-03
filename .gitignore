@@ -20,4 +20,6 @@ Thumbs.db
 pgdata/
 
 # Local scratch files
+*.jsonl
 .ignore-*
+

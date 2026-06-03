@@ -31,7 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let eval_file = std::env::args()
         .nth(2)
-        .unwrap_or_else(|| "contradiction_eval.jsonl".to_string());
+        .unwrap_or_else(|| "docs/fixtures/contradiction_eval.jsonl".to_string());
     let model = std::env::var("LLM_CHAT_MODEL").unwrap_or_else(|_| "gemini-2.5-flash".into());
 
     let file = std::fs::File::open(&eval_file)?;
