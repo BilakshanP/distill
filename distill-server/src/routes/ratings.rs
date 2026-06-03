@@ -16,6 +16,14 @@ pub struct CreateRatingRequest {
     #[serde(default)]
     pub tags: Vec<String>,
     pub rater_original_query: Option<String>,
+    /// When rater_context_visibility=optional, rater chooses whether to include context.
+    /// Defaults to true.
+    #[serde(default = "default_true")]
+    pub include_context: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Serialize, ToSchema)]
@@ -67,6 +75,26 @@ pub async fn create_rating(
     auth: AuthUser,
     Json(req): Json<CreateRatingRequest>,
 ) -> Result<(StatusCode, Json<RatingResponse>), StatusCode> {
+    let config = crate::routes::get_config_map(&state.db).await;
+    let visibility = config
+        .get("rater_context_visibility")
+        .map(|s| s.as_str())
+        .unwrap_or("optional");
+
+    // Determine what context to store based on config
+    let (comment, query) = match visibility {
+        "never" => (None, None),
+        "always" => (req.comment.clone(), req.rater_original_query.clone()),
+        _ => {
+            // optional: respect rater's choice
+            if req.include_context {
+                (req.comment.clone(), req.rater_original_query.clone())
+            } else {
+                (None, None)
+            }
+        }
+    };
+
     let row = sqlx::query_as::<_, RatingRow>(
         r#"INSERT INTO ratings (answer_id, rater_id, score, comment, tags, rater_original_query)
            VALUES ($1, $2, $3, $4, $5, $6)
@@ -78,9 +106,9 @@ pub async fn create_rating(
     .bind(answer_id)
     .bind(auth.user_id)
     .bind(req.score)
-    .bind(&req.comment)
+    .bind(&comment)
     .bind(&req.tags)
-    .bind(&req.rater_original_query)
+    .bind(&query)
     .fetch_one(&state.db)
     .await
     .map_err(|e| { tracing::error!("rating insert failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
