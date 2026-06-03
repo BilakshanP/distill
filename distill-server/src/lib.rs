@@ -269,6 +269,14 @@ pub fn build_router(state: AppState) -> Router {
             "/admin/users/{id}/promote",
             axum::routing::put(routes::admin::promote_user),
         )
+        .route(
+            "/admin/tenants",
+            axum::routing::post(routes::tenants::create_tenant).get(routes::tenants::list_tenants),
+        )
+        .route(
+            "/admin/tenants/assign",
+            axum::routing::put(routes::tenants::assign_tenant),
+        )
         .route("/graph", get(routes::graph::get_graph))
         .route(
             "/graph/node/{id}",

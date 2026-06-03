@@ -8,6 +8,7 @@ pub mod llm_cache;
 pub mod questions;
 pub mod ratings;
 pub mod tags;
+pub mod tenants;
 
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;

@@ -95,14 +95,14 @@ pub async fn github_callback(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Upsert user
-    let user = sqlx::query_as::<_, (uuid::Uuid,)>(
+    let user = sqlx::query_as::<_, (uuid::Uuid, uuid::Uuid)>(
         r#"INSERT INTO users (provider, provider_id, display_name, email, avatar_url)
            VALUES ('github', $1, $2, $3, $4)
            ON CONFLICT (provider, provider_id) DO UPDATE SET
              display_name = EXCLUDED.display_name,
              email = EXCLUDED.email,
              avatar_url = EXCLUDED.avatar_url
-           RETURNING id"#,
+           RETURNING id, tenant_id"#,
     )
     .bind(gh_user.id.to_string())
     .bind(&gh_user.login)
@@ -112,7 +112,13 @@ pub async fn github_callback(
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let jwt = jwt::create_token(user.0, &state.jwt_secret)
+    let tenant_id = if user.1 == uuid::Uuid::nil() {
+        None
+    } else {
+        Some(user.1)
+    };
+
+    let jwt = jwt::create_token_with_tenant(user.0, tenant_id, &state.jwt_secret)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(serde_json::json!({ "token": jwt })))
@@ -188,14 +194,14 @@ pub async fn google_callback(
         .name
         .unwrap_or_else(|| google_user.email.clone().unwrap_or("Google User".into()));
 
-    let user = sqlx::query_as::<_, (uuid::Uuid,)>(
+    let user = sqlx::query_as::<_, (uuid::Uuid, uuid::Uuid)>(
         r#"INSERT INTO users (provider, provider_id, display_name, email, avatar_url)
            VALUES ('google', $1, $2, $3, $4)
            ON CONFLICT (provider, provider_id) DO UPDATE SET
              display_name = EXCLUDED.display_name,
              email = EXCLUDED.email,
              avatar_url = EXCLUDED.avatar_url
-           RETURNING id"#,
+           RETURNING id, tenant_id"#,
     )
     .bind(&google_user.sub)
     .bind(&display_name)
@@ -205,7 +211,13 @@ pub async fn google_callback(
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let jwt = jwt::create_token(user.0, &state.jwt_secret)
+    let tenant_id = if user.1 == uuid::Uuid::nil() {
+        None
+    } else {
+        Some(user.1)
+    };
+
+    let jwt = jwt::create_token_with_tenant(user.0, tenant_id, &state.jwt_secret)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(serde_json::json!({ "token": jwt })))

@@ -32,6 +32,11 @@ where
         let claims = jwt::validate_token(token, &app_state.jwt_secret)
             .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
+        // Set tenant context for RLS if present in JWT
+        if let Some(tid) = claims.tenant_id {
+            crate::routes::set_tenant(&app_state.db, tid).await;
+        }
+
         Ok(AuthUser {
             user_id: claims.sub,
         })
