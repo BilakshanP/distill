@@ -52,7 +52,7 @@ pub async fn get_config_map(db: &PgPool) -> HashMap<String, String> {
     data
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::IntoParams)]
 pub struct CursorParams {
     #[serde(default = "default_page_limit")]
     pub limit: i64,

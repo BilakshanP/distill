@@ -299,7 +299,7 @@ pub async fn preview_question(
     }))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::IntoParams)]
 pub struct SearchParams {
     pub q: String,
     #[serde(default = "default_limit")]
@@ -324,7 +324,7 @@ pub struct SearchResult {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
-#[utoipa::path(get, path = "/questions/search", params(("q" = String, Query, description = "Search query")), responses((status = 200, body = Vec<SearchResult>)), tag = "questions", security(()))]
+#[utoipa::path(get, path = "/questions/search", params(SearchParams), responses((status = 200, body = Vec<SearchResult>)), tag = "questions", security(()))]
 pub async fn search_questions(
     State(state): State<AppState>,
     Query(params): Query<SearchParams>,

@@ -13,7 +13,7 @@ pub struct TagCount {
     pub count: i64,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::IntoParams)]
 pub struct TagParams {
     pub q: Option<String>,
     #[serde(default = "default_limit")]
@@ -26,7 +26,7 @@ fn default_limit() -> i64 {
     50
 }
 
-#[utoipa::path(get, path = "/tags", responses((status = 200, body = Vec<TagCount>)), tag = "tags", security(()))]
+#[utoipa::path(get, path = "/tags", params(TagParams), responses((status = 200, body = Vec<TagCount>)), tag = "tags", security(()))]
 pub async fn list_tags(
     State(state): State<AppState>,
     Query(params): Query<TagParams>,

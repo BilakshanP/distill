@@ -30,7 +30,7 @@ pub struct GraphEdge {
     pub weight: f64,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::IntoParams)]
 pub struct GraphParams {
     #[serde(default = "default_limit")]
     pub limit: i64,
@@ -40,7 +40,7 @@ fn default_limit() -> i64 {
     100
 }
 
-#[utoipa::path(get, path = "/graph", responses((status = 200, body = GraphResponse)), tag = "graph", security(()))]
+#[utoipa::path(get, path = "/graph", params(GraphParams), responses((status = 200, body = GraphResponse)), tag = "graph", security(()))]
 pub async fn get_graph(
     State(state): State<AppState>,
     Query(params): Query<GraphParams>,
