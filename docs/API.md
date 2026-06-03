@@ -119,6 +119,7 @@ Set via `PUT /admin/config`:
 | `llm_retry_attempts` | integer | Max retries on transient LLM errors (503/429) |
 | `stale_auto_resolve` | `true`, `false` | Auto-generate updated answer when marked stale |
 | `token_budget_monthly` | integer or empty | Monthly token budget (empty = unlimited) |
+| `rater_context_visibility` | `never`, `always`, `optional` | Whether rater comment/query is stored (optional = rater chooses) |
 
 ## Rate Limiting
 

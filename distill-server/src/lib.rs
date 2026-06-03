@@ -40,7 +40,7 @@ impl utoipa::Modify for SecurityAddon {
 #[openapi(
     info(
         title = "Distill API",
-        version = "0.3.0",
+        version = "0.4.0",
         license(name = "MIT OR Apache-2.0", url = "https://opensource.org/licenses/MIT")
     ),
     security(
