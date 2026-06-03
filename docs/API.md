@@ -139,10 +139,10 @@ Two eval binaries measure retrieval and contradiction quality against labeled da
 ### Retrieval eval
 
 ```bash
-cp docs/fixtures/eval_set.jsonl.example docs/fixtures/eval_set.jsonl
+cp distill-server/tests/fixtures/eval_set.jsonl.example distill-server/tests/fixtures/eval_set.jsonl
 # Edit: add real question UUIDs as relevant_ids
 
-cargo run --bin eval -- --eval-file docs/fixtures/eval_set.jsonl
+cargo run --bin eval -- --eval-file distill-server/tests/fixtures/eval_set.jsonl
 ```
 
 Format (JSONL):
@@ -155,10 +155,10 @@ Reports: Precision@5, MRR.
 ### Contradiction eval
 
 ```bash
-cp docs/fixtures/contradiction_eval.jsonl.example docs/fixtures/contradiction_eval.jsonl
+cp distill-server/tests/fixtures/contradiction_eval.jsonl.example distill-server/tests/fixtures/contradiction_eval.jsonl
 # Edit: add real answer pairs with ground truth
 
-cargo run --bin eval_contradictions -- --eval-file docs/fixtures/contradiction_eval.jsonl
+cargo run --bin eval_contradictions -- --eval-file distill-server/tests/fixtures/contradiction_eval.jsonl
 ```
 
 Format (JSONL):

@@ -28,7 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let eval_file = std::env::args()
         .nth(2)
-        .unwrap_or_else(|| "docs/fixtures/eval_set.jsonl".to_string());
+        .unwrap_or_else(|| "distill-server/tests/fixtures/eval_set.jsonl".to_string());
 
     let db_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://distill:distill@localhost:5432/distill".into());
