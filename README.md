@@ -125,7 +125,8 @@ distill/
 
 ## Configuration
 
-All config is via environment variables — see [`.env.example`](.env.example) for the full list with descriptions.
+- **Environment variables** (infrastructure: DB, secrets, model names) — see [`.env.example`](.env.example)
+- **Runtime config** (feature toggles, retry attempts, quotas, cache TTL) — stored in DB, managed via `GET/PUT /admin/config`. See [API Reference → Config Keys](docs/API.md#config-keys)
 
 ## License
 

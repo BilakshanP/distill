@@ -100,7 +100,9 @@ Response: { "data": [...], "next_cursor": "abc123", "has_more": true }
 GET /questions/search?q=test&limit=20&offset=0
 ```
 
-## Configuration Keys
+## Config Keys
+
+Runtime config stored in the `config` table. Seeded by [`migrations/009_create_config.sql`](../distill-server/migrations/009_create_config.sql) and [`010_add_llm_feature_flags.sql`](../distill-server/migrations/010_add_llm_feature_flags.sql).
 
 Set via `PUT /admin/config`:
 
