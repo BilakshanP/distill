@@ -148,3 +148,8 @@ pub struct CommentResponse {
 pub struct ConfigResponse {
     pub config: std::collections::HashMap<String, String>,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct ReEmbedResponse {
+    pub enqueued: i64,
+}

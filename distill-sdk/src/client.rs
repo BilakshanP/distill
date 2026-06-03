@@ -381,7 +381,45 @@ impl Client {
         Self::handle(resp).await
     }
 
+    // Questions — list
+    pub async fn list_questions(
+        &self,
+        limit: Option<i64>,
+        after: Option<&str>,
+    ) -> Result<Paginated<QuestionResponse>, Error> {
+        let mut req = self.request(reqwest::Method::GET, "/questions");
+        if let Some(l) = limit {
+            req = req.query(&[("limit", l.to_string())]);
+        }
+        if let Some(cursor) = after {
+            req = req.query(&[("after", cursor)]);
+        }
+        let resp = req.send().await?;
+        Self::handle(resp).await
+    }
+
     // Admin
+    pub async fn set_user_quota(
+        &self,
+        user_id: Uuid,
+        monthly_quota: Option<i32>,
+    ) -> Result<(), Error> {
+        let resp = self
+            .request(reqwest::Method::PUT, "/admin/user-quota")
+            .json(&serde_json::json!({ "user_id": user_id, "monthly_quota": monthly_quota }))
+            .send()
+            .await?;
+        Self::handle_no_body(resp).await
+    }
+
+    pub async fn re_embed(&self) -> Result<ReEmbedResponse, Error> {
+        let resp = self
+            .request(reqwest::Method::POST, "/admin/re-embed")
+            .send()
+            .await?;
+        Self::handle(resp).await
+    }
+
     pub async fn get_config(&self) -> Result<ConfigResponse, Error> {
         let resp = self
             .request(reqwest::Method::GET, "/admin/config")
