@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod config;
 pub mod routes;
+pub mod services;
 
 use axum::{extract::State, http::StatusCode, routing::get, Json, Router};
 use sqlx::PgPool;

@@ -189,9 +189,9 @@ async fn do_detect(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use genai::chat::{ChatMessage, ChatRequest};
 
-    // Get other answers to the same or similar questions
+    // Prefilter: compare only top-5 answers (most recent, same question)
     let other_answers = sqlx::query_as::<_, (Uuid, String)>(
-        "SELECT id, body FROM answers WHERE question_id = $1 AND id != $2",
+        "SELECT id, body FROM answers WHERE question_id = $1 AND id != $2 ORDER BY created_at DESC LIMIT 5",
     )
     .bind(question_id)
     .bind(answer_id)

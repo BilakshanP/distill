@@ -198,99 +198,7 @@ pub async fn generate_ai_answer(
     title: &str,
     body: &str,
 ) {
-    if let Err(e) = do_generate_ai_answer(db, chat_model, question_id, title, body).await {
-        tracing::error!("AI answer generation failed for {}: {:?}", question_id, e);
-    }
-}
-
-async fn do_generate_ai_answer(
-    db: &sqlx::PgPool,
-    chat_model: &str,
-    question_id: Uuid,
-    title: &str,
-    body: &str,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    use genai::chat::{ChatMessage, ChatRequest};
-
-    // Gather context via hybrid retrieval (BM25 + vector if embedding available)
-    let query_text = format!("{} {}", title, body);
-    let context_rows = sqlx::query_as::<_, (String, String, String)>(
-        r#"WITH bm25 AS (
-             SELECT q.id, q.title, q.body, ts_rank(q.tsv, websearch_to_tsquery('english', $1)) AS score
-             FROM questions q WHERE q.tsv @@ websearch_to_tsquery('english', $1) AND q.id != $2
-             ORDER BY score DESC LIMIT 10
-           ),
-           answered AS (
-             SELECT b.title AS qt, b.body AS qb, a.body AS ab,
-                    ROW_NUMBER() OVER (PARTITION BY b.id ORDER BY a.created_at DESC) AS rn
-             FROM bm25 b JOIN answers a ON a.question_id = b.id
-           )
-           SELECT qt, qb, ab FROM answered WHERE rn = 1 LIMIT 5"#,
-    )
-    .bind(&query_text)
-    .bind(question_id)
-    .fetch_all(db)
-    .await?;
-
-    let mut context = String::new();
-    for (qt, qb, ab) in &context_rows {
-        context.push_str(&format!("Q: {} - {}\nA: {}\n\n", qt, qb, ab));
-    }
-
-    let system_prompt = if context.is_empty() {
-        "You are a knowledgeable assistant. Answer the question clearly and concisely.".to_string()
-    } else {
-        format!(
-            "You are a knowledgeable assistant. Here is some relevant context from existing Q&A:\n\n{}\nAnswer the following question clearly and concisely.",
-            context
-        )
-    };
-
-    let client = genai::Client::default();
-    let chat_req = ChatRequest::new(vec![
-        ChatMessage::system(system_prompt),
-        ChatMessage::user(format!("Question: {}\n\n{}", title, body)),
-    ]);
-
-    let config = crate::routes::get_config_map(db).await;
-    let retries: u32 = config
-        .get("llm_retry_attempts")
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(3);
-
-    let resp = crate::routes::llm_cache::retry_llm(retries, || {
-        let req = chat_req.clone();
-        let c = &client;
-        async move { c.exec_chat(chat_model, req, None).await }
-    })
-    .await?;
-    let answer_text = resp
-        .first_text()
-        .ok_or("no text in LLM response")?
-        .to_string();
-
-    let (answer_id,) = sqlx::query_as::<_, (Uuid,)>(
-        r#"INSERT INTO answers (question_id, author_type, body)
-           VALUES ($1, 'ai', $2) RETURNING id"#,
-    )
-    .bind(question_id)
-    .bind(&answer_text)
-    .fetch_one(db)
-    .await?;
-
-    tracing::info!("AI answer generated for question {}", question_id);
-
-    // Trigger contradiction detection
-    crate::routes::contradictions::detect_contradictions(
-        db,
-        chat_model,
-        answer_id,
-        &answer_text,
-        question_id,
-    )
-    .await;
-
-    Ok(())
+    crate::services::answers::generate_ai_answer(db, chat_model, question_id, title, body).await;
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -555,49 +463,23 @@ async fn resolve_stale(
     old_body: &str,
     stale_reason: &str,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    use genai::chat::{ChatMessage, ChatRequest};
-
-    let client = genai::Client::default();
-    let chat_req = ChatRequest::new(vec![
-        ChatMessage::system("You are a knowledgeable assistant. An answer has been marked as stale/outdated. Generate an updated version of the answer based on the staleness reason. Return ONLY the updated answer text."),
-        ChatMessage::user(format!(
-            "Original answer:\n{}\n\nReason it's stale: {}",
-            old_body, stale_reason
-        )),
-    ]);
-
-    let config = crate::routes::get_config_map(db).await;
-    let retries: u32 = config
-        .get("llm_retry_attempts")
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(3);
-
-    let resp = crate::routes::llm_cache::retry_llm(retries, || {
-        let req = chat_req.clone();
-        let c = &client;
-        async move { c.exec_chat(chat_model, req, None).await }
-    })
-    .await?;
-
-    if let Some(updated) = resp.first_text() {
-        // Store as a new answer (AI-generated replacement)
-        let question_id: (uuid::Uuid,) =
-            sqlx::query_as("SELECT question_id FROM answers WHERE id = $1")
-                .bind(answer_id)
-                .fetch_one(db)
-                .await?;
-
-        sqlx::query("INSERT INTO answers (question_id, author_type, body) VALUES ($1, 'ai', $2)")
-            .bind(question_id.0)
-            .bind(updated.trim())
-            .execute(db)
+    let question_id: (uuid::Uuid,) =
+        sqlx::query_as("SELECT question_id FROM answers WHERE id = $1")
+            .bind(answer_id)
+            .fetch_one(db)
             .await?;
-
-        tracing::info!(
-            "stale answer {} auto-resolved with new AI answer",
-            answer_id
-        );
-    }
-
+    let q_row: (String, String) = sqlx::query_as("SELECT title, body FROM questions WHERE id = $1")
+        .bind(question_id.0)
+        .fetch_one(db)
+        .await?;
+    crate::services::answers::resolve_stale(
+        db,
+        chat_model,
+        question_id.0,
+        &q_row.0,
+        old_body,
+        stale_reason,
+    )
+    .await;
     Ok(())
 }
