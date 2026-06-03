@@ -57,6 +57,29 @@ Tests do not depend on GitHub OAuth or any LLM API key — they use direct DB in
 
 ## Swagger / OpenAPI
 
+Swagger UI is available at `/swagger-ui` in debug builds.
+
+### Getting a bearer token for Swagger testing
+
+1. Start the server: `cargo run -p distill-server`
+2. Visit `http://localhost:3000/auth/github` in your browser
+3. Complete the GitHub OAuth flow
+4. You'll be redirected with a JWT token in the response
+5. In Swagger UI, click the **Authorize** 🔒 button at the top
+6. Enter: `Bearer <your-token>` (or just the token — Swagger adds the prefix)
+7. All locked endpoints will now send the token automatically
+
+For quick local testing without OAuth, you can generate a token directly:
+
+```bash
+# In a Rust test or script:
+distill_server::auth::jwt::create_token(user_id, "your-jwt-secret")
+```
+
+### Annotation requirements
+
+### Annotation requirements
+
 Every public endpoint **must** have a full `#[utoipa::path]` annotation including:
 
 - HTTP method and path
