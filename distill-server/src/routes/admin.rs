@@ -127,3 +127,68 @@ pub async fn promote_user(
     }
     Ok(StatusCode::NO_CONTENT)
 }
+
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct JobResponse {
+    pub id: uuid::Uuid,
+    pub job_type: String,
+    pub status: String,
+    pub attempts: i32,
+    pub max_attempts: i32,
+    pub error: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub started_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[derive(Deserialize)]
+pub struct JobsParams {
+    #[serde(default)]
+    pub status: Option<String>, // pending, running, completed, failed
+    #[serde(default = "default_jobs_limit")]
+    pub limit: i64,
+    #[serde(default)]
+    pub offset: i64,
+}
+
+fn default_jobs_limit() -> i64 {
+    50
+}
+
+pub async fn list_jobs(
+    State(state): State<AppState>,
+    _auth: AdminUser,
+    axum::extract::Query(params): axum::extract::Query<JobsParams>,
+) -> Result<Json<Vec<JobResponse>>, StatusCode> {
+    let limit = params.limit.min(200);
+
+    let rows = if let Some(ref status) = params.status {
+        sqlx::query_as::<_, (uuid::Uuid, String, String, i32, i32, Option<String>, chrono::DateTime<chrono::Utc>, Option<chrono::DateTime<chrono::Utc>>, Option<chrono::DateTime<chrono::Utc>>)>(
+            "SELECT id, job_type, status, attempts, max_attempts, error, created_at, started_at, completed_at FROM jobs WHERE status = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"
+        )
+        .bind(status).bind(limit).bind(params.offset)
+        .fetch_all(&state.db).await
+    } else {
+        sqlx::query_as::<_, (uuid::Uuid, String, String, i32, i32, Option<String>, chrono::DateTime<chrono::Utc>, Option<chrono::DateTime<chrono::Utc>>, Option<chrono::DateTime<chrono::Utc>>)>(
+            "SELECT id, job_type, status, attempts, max_attempts, error, created_at, started_at, completed_at FROM jobs ORDER BY created_at DESC LIMIT $1 OFFSET $2"
+        )
+        .bind(limit).bind(params.offset)
+        .fetch_all(&state.db).await
+    }.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(
+        rows.into_iter()
+            .map(|r| JobResponse {
+                id: r.0,
+                job_type: r.1,
+                status: r.2,
+                attempts: r.3,
+                max_attempts: r.4,
+                error: r.5,
+                created_at: r.6,
+                started_at: r.7,
+                completed_at: r.8,
+            })
+            .collect(),
+    ))
+}

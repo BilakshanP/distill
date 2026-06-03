@@ -161,3 +161,16 @@ pub struct TenantResponse {
     pub slug: String,
     pub created_at: String,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct JobResponse {
+    pub id: uuid::Uuid,
+    pub job_type: String,
+    pub status: String,
+    pub attempts: i32,
+    pub max_attempts: i32,
+    pub error: Option<String>,
+    pub created_at: String,
+    pub started_at: Option<String>,
+    pub completed_at: Option<String>,
+}

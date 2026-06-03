@@ -277,6 +277,7 @@ pub fn build_router(state: AppState) -> Router {
             "/admin/tenants/assign",
             axum::routing::put(routes::tenants::assign_tenant),
         )
+        .route("/admin/jobs", get(routes::admin::list_jobs))
         .route("/graph", get(routes::graph::get_graph))
         .route(
             "/graph/node/{id}",

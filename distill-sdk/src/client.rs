@@ -488,4 +488,20 @@ impl Client {
             .await?;
         Self::handle_no_body(resp).await
     }
+
+    pub async fn list_jobs(
+        &self,
+        status: Option<&str>,
+        limit: Option<i64>,
+    ) -> Result<Vec<JobResponse>, Error> {
+        let mut req = self.request(reqwest::Method::GET, "/admin/jobs");
+        if let Some(s) = status {
+            req = req.query(&[("status", s)]);
+        }
+        if let Some(l) = limit {
+            req = req.query(&[("limit", l.to_string())]);
+        }
+        let resp = req.send().await?;
+        Self::handle(resp).await
+    }
 }
