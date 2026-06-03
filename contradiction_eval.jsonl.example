@@ -1,0 +1,5 @@
+{"answer_a": "Rust uses a garbage collector for memory management.", "answer_b": "Rust uses ownership and borrowing instead of a garbage collector.", "contradicts": true}
+{"answer_a": "PostgreSQL supports JSON columns.", "answer_b": "PostgreSQL has JSONB for efficient JSON storage.", "contradicts": false}
+{"answer_a": "You should always use async in Rust web servers.", "answer_b": "Sync Rust web servers are perfectly fine for low-traffic apps.", "contradicts": true}
+{"answer_a": "Axum is built on top of Tower.", "answer_b": "Axum uses the Tower middleware ecosystem.", "contradicts": false}
+{"answer_a": "Vec::new() allocates memory immediately.", "answer_b": "Vec::new() does not allocate until elements are pushed.", "contradicts": true}
