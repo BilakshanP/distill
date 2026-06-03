@@ -12,14 +12,44 @@ pub mod tags;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use std::collections::HashMap;
+use std::sync::OnceLock;
+use tokio::sync::RwLock;
+
+struct ConfigCache {
+    data: HashMap<String, String>,
+    fetched_at: std::time::Instant,
+}
+
+static CONFIG_CACHE: OnceLock<RwLock<Option<ConfigCache>>> = OnceLock::new();
 
 pub async fn get_config_map(db: &PgPool) -> HashMap<String, String> {
-    sqlx::query_as::<_, (String, String)>("SELECT key, value FROM config")
-        .fetch_all(db)
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .collect()
+    let lock = CONFIG_CACHE.get_or_init(|| RwLock::new(None));
+
+    // Check cache (30s TTL)
+    {
+        let guard = lock.read().await;
+        if let Some(ref cached) = *guard {
+            if cached.fetched_at.elapsed() < std::time::Duration::from_secs(30) {
+                return cached.data.clone();
+            }
+        }
+    }
+
+    // Cache miss — fetch and store
+    let data: HashMap<String, String> =
+        sqlx::query_as::<_, (String, String)>("SELECT key, value FROM config")
+            .fetch_all(db)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
+
+    let mut guard = lock.write().await;
+    *guard = Some(ConfigCache {
+        data: data.clone(),
+        fetched_at: std::time::Instant::now(),
+    });
+    data
 }
 
 #[derive(Deserialize)]

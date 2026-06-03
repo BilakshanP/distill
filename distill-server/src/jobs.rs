@@ -47,7 +47,8 @@ pub async fn process_pending(db: &PgPool) {
     let jobs = sqlx::query_as::<_, (Uuid, String, serde_json::Value, i32, i32)>(
         r#"UPDATE jobs SET status = 'running', started_at = now(), attempts = attempts + 1
            WHERE id IN (
-             SELECT id FROM jobs WHERE status = 'pending' ORDER BY created_at LIMIT 5
+             SELECT id FROM jobs WHERE status = 'pending' AND next_attempt_at <= now()
+             ORDER BY created_at LIMIT 5
              FOR UPDATE SKIP LOCKED
            )
            RETURNING id, job_type, payload, attempts, max_attempts"#,
@@ -78,10 +79,13 @@ pub async fn process_pending(db: &PgPool) {
                 } else {
                     "pending"
                 };
-                sqlx::query("UPDATE jobs SET status = $1, error = $2 WHERE id = $3")
+                // Exponential backoff: 4s, 16s, 64s, ...
+                let backoff_secs = 4i64.pow(attempts as u32);
+                sqlx::query("UPDATE jobs SET status = $1, error = $2, next_attempt_at = now() + make_interval(secs => $4) WHERE id = $3")
                     .bind(new_status)
                     .bind(e.to_string())
                     .bind(id)
+                    .bind(backoff_secs as f64)
                     .execute(db)
                     .await
                     .ok();
