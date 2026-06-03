@@ -111,3 +111,19 @@ pub async fn re_embed(
 
     Ok(Json(ReEmbedResponse { enqueued: count }))
 }
+
+pub async fn promote_user(
+    State(state): State<AppState>,
+    _auth: AdminUser,
+    axum::extract::Path(user_id): axum::extract::Path<uuid::Uuid>,
+) -> Result<StatusCode, StatusCode> {
+    let result = sqlx::query("UPDATE users SET role = 'admin' WHERE id = $1 AND role != 'admin'")
+        .bind(user_id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if result.rows_affected() == 0 {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}

@@ -265,6 +265,10 @@ pub fn build_router(state: AppState) -> Router {
             "/admin/re-embed",
             axum::routing::post(routes::admin::re_embed),
         )
+        .route(
+            "/admin/users/{id}/promote",
+            axum::routing::put(routes::admin::promote_user),
+        )
         .route("/graph", get(routes::graph::get_graph))
         .route(
             "/graph/node/{id}",

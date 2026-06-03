@@ -569,3 +569,44 @@ async fn test_job_queue_lifecycle() {
         .unwrap();
     assert_eq!(status, "failed");
 }
+
+#[tokio::test]
+async fn test_admin_promote_user() {
+    let server = setup().await;
+    let (user_id, _user_token) = create_test_user().await;
+    let (_admin_id, admin_token) = create_admin_user().await;
+
+    // Non-admin cannot access admin endpoints
+    let resp = server
+        .get("/admin/config")
+        .authorization_bearer(&_user_token)
+        .await;
+    resp.assert_status(axum::http::StatusCode::FORBIDDEN);
+
+    // Admin promotes user
+    let resp = server
+        .put(&format!("/admin/users/{}/promote", user_id))
+        .authorization_bearer(&admin_token)
+        .await;
+    resp.assert_status(axum::http::StatusCode::NO_CONTENT);
+
+    // Promoted user can now access admin endpoints
+    let resp = server
+        .get("/admin/config")
+        .authorization_bearer(&_user_token)
+        .await;
+    resp.assert_status_ok();
+}
+
+#[tokio::test]
+async fn test_non_admin_cannot_promote() {
+    let server = setup().await;
+    let (target_id, _) = create_test_user().await;
+    let (_, user_token) = create_test_user().await;
+
+    let resp = server
+        .put(&format!("/admin/users/{}/promote", target_id))
+        .authorization_bearer(&user_token)
+        .await;
+    resp.assert_status(axum::http::StatusCode::FORBIDDEN);
+}
