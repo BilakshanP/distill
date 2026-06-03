@@ -655,7 +655,7 @@ dependencies = [
 
 [[package]]
 name = "distill-sdk"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "axum",
  "distill-server",
@@ -671,7 +671,7 @@ dependencies = [
 
 [[package]]
 name = "distill-server"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "axum",
  "axum-extra",

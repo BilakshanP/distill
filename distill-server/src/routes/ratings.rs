@@ -109,7 +109,7 @@ pub async fn redact_rating(
     Ok(StatusCode::NO_CONTENT)
 }
 
-#[utoipa::path(get, path = "/answers/{id}/ratings", responses((status = 200)), tag = "ratings")]
+#[utoipa::path(get, path = "/answers/{id}/ratings", responses((status = 200)), tag = "ratings", security(()))]
 pub async fn get_ratings(
     State(state): State<AppState>,
     Path(answer_id): Path<Uuid>,

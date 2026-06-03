@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::{auth::middleware::AuthUser, AppState};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct LinkRequest {
     pub target_question_id: Uuid,
     #[serde(default = "default_link_type")]
@@ -19,7 +19,7 @@ fn default_link_type() -> String {
     "related".into()
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct LinkResponse {
     pub id: Uuid,
     pub question_id_a: Uuid,
@@ -28,6 +28,7 @@ pub struct LinkResponse {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
+#[utoipa::path(post, path = "/questions/{id}/link", request_body = LinkRequest, responses((status = 201, body = LinkResponse)), tag = "links")]
 pub async fn link_questions(
     State(state): State<AppState>,
     Path(question_id): Path<Uuid>,

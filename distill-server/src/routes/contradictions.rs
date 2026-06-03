@@ -77,7 +77,7 @@ pub async fn flag_contradiction(
     Ok((StatusCode::CREATED, Json(row.into())))
 }
 
-#[utoipa::path(get, path = "/answers/{id}/contradictions", responses((status = 200, body = Vec<ContradictionResponse>)), tag = "contradictions")]
+#[utoipa::path(get, path = "/answers/{id}/contradictions", responses((status = 200, body = Vec<ContradictionResponse>)), tag = "contradictions", security(()))]
 pub async fn get_contradictions_for_answer(
     State(state): State<AppState>,
     Path(answer_id): Path<Uuid>,

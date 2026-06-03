@@ -8,12 +8,12 @@ use uuid::Uuid;
 
 use crate::{auth::middleware::AuthUser, AppState};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct CreateCommentRequest {
     pub body: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct CommentResponse {
     pub id: Uuid,
     pub author_id: Uuid,
@@ -21,6 +21,7 @@ pub struct CommentResponse {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
+#[utoipa::path(post, path = "/questions/{id}/comments", request_body = CreateCommentRequest, responses((status = 201, body = CommentResponse)), tag = "comments")]
 pub async fn create_question_comment(
     State(state): State<AppState>,
     Path(question_id): Path<Uuid>,
@@ -53,6 +54,7 @@ pub async fn create_question_comment(
     ))
 }
 
+#[utoipa::path(get, path = "/questions/{id}/comments", responses((status = 200, description = "Paginated comments")), tag = "comments", security(()))]
 pub async fn get_question_comments(
     State(state): State<AppState>,
     Path(question_id): Path<Uuid>,
@@ -94,6 +96,7 @@ pub async fn get_question_comments(
     }))
 }
 
+#[utoipa::path(post, path = "/answers/{id}/comments", request_body = CreateCommentRequest, responses((status = 201, body = CommentResponse)), tag = "comments")]
 pub async fn create_answer_comment(
     State(state): State<AppState>,
     Path(answer_id): Path<Uuid>,
@@ -126,6 +129,7 @@ pub async fn create_answer_comment(
     ))
 }
 
+#[utoipa::path(get, path = "/answers/{id}/comments", responses((status = 200, description = "Paginated comments")), tag = "comments", security(()))]
 pub async fn get_answer_comments(
     State(state): State<AppState>,
     Path(answer_id): Path<Uuid>,

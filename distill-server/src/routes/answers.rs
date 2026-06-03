@@ -105,7 +105,7 @@ pub async fn edit_answer(
     }))
 }
 
-#[utoipa::path(get, path = "/answers/{id}/history", responses((status = 200)), tag = "answers")]
+#[utoipa::path(get, path = "/answers/{id}/history", responses((status = 200)), tag = "answers", security(()))]
 pub async fn get_history(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -148,7 +148,7 @@ pub async fn get_history(
     }))
 }
 
-#[utoipa::path(get, path = "/questions/{id}/answers", responses((status = 200, body = Vec<AnswerResponse>)), tag = "answers")]
+#[utoipa::path(get, path = "/questions/{id}/answers", responses((status = 200, body = Vec<AnswerResponse>)), tag = "answers", security(()))]
 pub async fn get_answers(
     State(state): State<AppState>,
     Path(question_id): Path<Uuid>,
@@ -412,7 +412,7 @@ pub async fn dig_deeper(
     ))
 }
 
-#[utoipa::path(get, path = "/answers/{id}/deep-dives", responses((status = 200)), tag = "answers")]
+#[utoipa::path(get, path = "/answers/{id}/deep-dives", responses((status = 200)), tag = "answers", security(()))]
 pub async fn get_deep_dives(
     State(state): State<AppState>,
     Path(answer_id): Path<Uuid>,

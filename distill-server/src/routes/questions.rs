@@ -324,7 +324,7 @@ pub struct SearchResult {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
-#[utoipa::path(get, path = "/questions/search", params(("q" = String, Query, description = "Search query")), responses((status = 200, body = Vec<SearchResult>)), tag = "questions")]
+#[utoipa::path(get, path = "/questions/search", params(("q" = String, Query, description = "Search query")), responses((status = 200, body = Vec<SearchResult>)), tag = "questions", security(()))]
 pub async fn search_questions(
     State(state): State<AppState>,
     Query(params): Query<SearchParams>,
@@ -468,7 +468,7 @@ pub async fn search_questions(
     ))
 }
 
-#[utoipa::path(get, path = "/questions", responses((status = 200, description = "Paginated list of questions")), tag = "questions")]
+#[utoipa::path(get, path = "/questions", responses((status = 200, description = "Paginated list of questions")), tag = "questions", security(()))]
 pub async fn list_questions(
     State(state): State<AppState>,
     Query(params): Query<crate::routes::CursorParams>,
@@ -521,7 +521,7 @@ pub async fn list_questions(
     }))
 }
 
-#[utoipa::path(get, path = "/questions/{id}", responses((status = 200, body = QuestionResponse)), tag = "questions")]
+#[utoipa::path(get, path = "/questions/{id}", responses((status = 200, body = QuestionResponse)), tag = "questions", security(()))]
 pub async fn get_question(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,

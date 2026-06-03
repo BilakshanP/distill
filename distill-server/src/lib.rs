@@ -20,6 +20,22 @@ use utoipa_swagger_ui::SwaggerUi;
 use auth::middleware::AuthUser;
 
 #[cfg(debug_assertions)]
+struct SecurityAddon;
+
+#[cfg(debug_assertions)]
+impl utoipa::Modify for SecurityAddon {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        let components = openapi.components.get_or_insert_with(Default::default);
+        components.add_security_scheme(
+            "bearer",
+            utoipa::openapi::security::SecurityScheme::Http(utoipa::openapi::security::Http::new(
+                utoipa::openapi::security::HttpAuthScheme::Bearer,
+            )),
+        );
+    }
+}
+
+#[cfg(debug_assertions)]
 #[derive(OpenApi)]
 #[openapi(
     info(
@@ -27,6 +43,10 @@ use auth::middleware::AuthUser;
         version = "0.3.0",
         license(name = "MIT OR Apache-2.0", url = "https://opensource.org/licenses/MIT")
     ),
+    security(
+        ("bearer" = [])
+    ),
+    modifiers(&SecurityAddon),
     paths(
         routes::questions::create_question,
         routes::questions::list_questions,
@@ -48,6 +68,11 @@ use auth::middleware::AuthUser;
         routes::graph::get_graph,
         routes::graph::get_node_neighborhood,
         routes::tags::list_tags,
+        routes::comments::create_question_comment,
+        routes::comments::get_question_comments,
+        routes::comments::create_answer_comment,
+        routes::comments::get_answer_comments,
+        routes::links::link_questions,
     ),
     components(schemas(
         routes::questions::CreateQuestionRequest,
@@ -69,6 +94,10 @@ use auth::middleware::AuthUser;
         routes::graph::GraphNode,
         routes::graph::GraphEdge,
         routes::tags::TagCount,
+        routes::comments::CreateCommentRequest,
+        routes::comments::CommentResponse,
+        routes::links::LinkRequest,
+        routes::links::LinkResponse,
     )),
     tags(
         (name = "questions", description = "Question endpoints"),
@@ -77,6 +106,8 @@ use auth::middleware::AuthUser;
         (name = "contradictions", description = "Contradiction detection"),
         (name = "graph", description = "Knowledge graph"),
         (name = "tags", description = "Tag endpoints"),
+        (name = "comments", description = "Comments on questions and answers"),
+        (name = "links", description = "Manual question linking"),
     )
 )]
 struct ApiDoc;
