@@ -46,8 +46,10 @@ Server starts at `http://localhost:3000`.
 
 1. Create a GitHub OAuth App at https://github.com/settings/developers
    - Callback URL: `http://localhost:3000/auth/github/callback`
-2. Add credentials to `.env`
-3. Visit `http://localhost:3000/auth/github` to login and get a JWT token
+2. (Optional) Create Google OAuth credentials at https://console.cloud.google.com/apis/credentials
+   - Callback URL: `http://localhost:3000/auth/google/callback`
+3. Add credentials to `.env`
+4. Visit `http://localhost:3000/auth/github` or `/auth/google` to login and get a JWT token
 
 ### Running Tests
 

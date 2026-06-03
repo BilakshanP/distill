@@ -24,6 +24,8 @@ async fn setup() -> TestServer {
         jwt_secret: "test-secret".into(),
         github_client_id: "test".into(),
         github_client_secret: "test".into(),
+        google_client_id: None,
+        google_client_secret: None,
         base_url: "http://localhost:3000".into(),
         llm_chat_model: None,
         llm_embedding_model: None,

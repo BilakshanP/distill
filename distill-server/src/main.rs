@@ -31,6 +31,8 @@ async fn main() {
         jwt_secret: cfg.jwt_secret,
         github_client_id: cfg.github_client_id,
         github_client_secret: cfg.github_client_secret,
+        google_client_id: cfg.google_client_id,
+        google_client_secret: cfg.google_client_secret,
         base_url: cfg.base_url,
         llm_chat_model: cfg.llm_chat_model.clone(),
         llm_embedding_model: cfg.llm_embedding_model.clone(),

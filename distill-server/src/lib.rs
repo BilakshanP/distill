@@ -118,6 +118,8 @@ pub struct AppState {
     pub jwt_secret: String,
     pub github_client_id: String,
     pub github_client_secret: String,
+    pub google_client_id: Option<String>,
+    pub google_client_secret: Option<String>,
     pub base_url: String,
     pub llm_chat_model: Option<String>,
     pub llm_embedding_model: Option<String>,
@@ -196,6 +198,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/health", get(health))
         .route("/auth/github", get(auth::oauth::github_login))
         .route("/auth/github/callback", get(auth::oauth::github_callback))
+        .route("/auth/google", get(auth::oauth::google_login))
+        .route("/auth/google/callback", get(auth::oauth::google_callback))
         .route("/me", get(me).delete(delete_me))
         .route(
             "/questions",

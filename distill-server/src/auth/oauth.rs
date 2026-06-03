@@ -117,3 +117,96 @@ pub async fn github_callback(
 
     Ok(Json(serde_json::json!({ "token": jwt })))
 }
+
+// === Google OAuth ===
+
+#[derive(Deserialize)]
+struct GoogleUser {
+    sub: String,
+    name: Option<String>,
+    email: Option<String>,
+    picture: Option<String>,
+}
+
+fn google_oauth_client(state: &AppState) -> Option<GhOAuthClient> {
+    let client_id = state.google_client_id.as_ref()?;
+    let client_secret = state.google_client_secret.as_ref()?;
+    Some(
+        BasicClient::new(ClientId::new(client_id.clone()))
+            .set_client_secret(ClientSecret::new(client_secret.clone()))
+            .set_auth_uri(
+                AuthUrl::new("https://accounts.google.com/o/oauth2/v2/auth".into()).unwrap(),
+            )
+            .set_token_uri(TokenUrl::new("https://oauth2.googleapis.com/token".into()).unwrap())
+            .set_redirect_uri(
+                RedirectUrl::new(format!("{}/auth/google/callback", state.base_url)).unwrap(),
+            ),
+    )
+}
+
+pub async fn google_login(State(state): State<AppState>) -> Result<Redirect, StatusCode> {
+    let client = google_oauth_client(&state).ok_or(StatusCode::NOT_FOUND)?;
+    let (auth_url, _csrf) = client
+        .authorize_url(CsrfToken::new_random)
+        .add_scope(Scope::new("openid".into()))
+        .add_scope(Scope::new("email".into()))
+        .add_scope(Scope::new("profile".into()))
+        .url();
+    Ok(Redirect::to(auth_url.as_str()))
+}
+
+pub async fn google_callback(
+    State(state): State<AppState>,
+    Query(params): Query<CallbackParams>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let client = google_oauth_client(&state).ok_or(StatusCode::NOT_FOUND)?;
+
+    let http_client = reqwest::ClientBuilder::new()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let token = client
+        .exchange_code(AuthorizationCode::new(params.code))
+        .request_async(&http_client)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let access_token = token.access_token().secret();
+
+    let google_user: GoogleUser = reqwest::Client::new()
+        .get("https://openidconnect.googleapis.com/v1/userinfo")
+        .header("Authorization", format!("Bearer {}", access_token))
+        .send()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .json()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let display_name = google_user
+        .name
+        .unwrap_or_else(|| google_user.email.clone().unwrap_or("Google User".into()));
+
+    let user = sqlx::query_as::<_, (uuid::Uuid,)>(
+        r#"INSERT INTO users (provider, provider_id, display_name, email, avatar_url)
+           VALUES ('google', $1, $2, $3, $4)
+           ON CONFLICT (provider, provider_id) DO UPDATE SET
+             display_name = EXCLUDED.display_name,
+             email = EXCLUDED.email,
+             avatar_url = EXCLUDED.avatar_url
+           RETURNING id"#,
+    )
+    .bind(&google_user.sub)
+    .bind(&display_name)
+    .bind(&google_user.email)
+    .bind(&google_user.picture)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let jwt = jwt::create_token(user.0, &state.jwt_secret)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(serde_json::json!({ "token": jwt })))
+}
