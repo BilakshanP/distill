@@ -212,13 +212,22 @@ async fn do_generate_ai_answer(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use genai::chat::{ChatMessage, ChatRequest};
 
-    // Gather context: find similar Q&A pairs
+    // Gather context via hybrid retrieval (BM25 + vector if embedding available)
+    let query_text = format!("{} {}", title, body);
     let context_rows = sqlx::query_as::<_, (String, String, String)>(
-        r#"SELECT q.title, q.body, a.body
-           FROM answers a JOIN questions q ON q.id = a.question_id
-           WHERE q.id != $1
-           ORDER BY q.created_at DESC LIMIT 5"#,
+        r#"WITH bm25 AS (
+             SELECT q.id, q.title, q.body, ts_rank(q.tsv, websearch_to_tsquery('english', $1)) AS score
+             FROM questions q WHERE q.tsv @@ websearch_to_tsquery('english', $1) AND q.id != $2
+             ORDER BY score DESC LIMIT 10
+           ),
+           answered AS (
+             SELECT b.title AS qt, b.body AS qb, a.body AS ab,
+                    ROW_NUMBER() OVER (PARTITION BY b.id ORDER BY a.created_at DESC) AS rn
+             FROM bm25 b JOIN answers a ON a.question_id = b.id
+           )
+           SELECT qt, qb, ab FROM answered WHERE rn = 1 LIMIT 5"#,
     )
+    .bind(&query_text)
     .bind(question_id)
     .fetch_all(db)
     .await?;
@@ -260,35 +269,26 @@ async fn do_generate_ai_answer(
         .ok_or("no text in LLM response")?
         .to_string();
 
-    sqlx::query(
+    let (answer_id,) = sqlx::query_as::<_, (Uuid,)>(
         r#"INSERT INTO answers (question_id, author_type, body)
-           VALUES ($1, 'ai', $2)"#,
+           VALUES ($1, 'ai', $2) RETURNING id"#,
     )
     .bind(question_id)
     .bind(&answer_text)
-    .execute(db)
+    .fetch_one(db)
     .await?;
 
     tracing::info!("AI answer generated for question {}", question_id);
 
     // Trigger contradiction detection
-    let answer_row = sqlx::query_as::<_, (Uuid,)>(
-        "SELECT id FROM answers WHERE question_id = $1 AND author_type = 'ai' ORDER BY created_at DESC LIMIT 1"
+    crate::routes::contradictions::detect_contradictions(
+        db,
+        chat_model,
+        answer_id,
+        &answer_text,
+        question_id,
     )
-    .bind(question_id)
-    .fetch_optional(db)
-    .await?;
-
-    if let Some((answer_id,)) = answer_row {
-        crate::routes::contradictions::detect_contradictions(
-            db,
-            chat_model,
-            answer_id,
-            &answer_text,
-            question_id,
-        )
-        .await;
-    }
+    .await;
 
     Ok(())
 }

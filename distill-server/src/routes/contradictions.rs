@@ -35,15 +35,17 @@ pub async fn flag_contradiction(
     let row = sqlx::query_as::<_, (Uuid, Uuid, Uuid, String, String, Option<Uuid>, String, chrono::DateTime<chrono::Utc>)>(
         r#"INSERT INTO contradiction_flags (answer_id_a, answer_id_b, explanation, source, flagged_by)
            VALUES ($1, $2, $3, 'user', $4)
+           ON CONFLICT (LEAST(answer_id_a, answer_id_b), GREATEST(answer_id_a, answer_id_b)) DO NOTHING
            RETURNING id, answer_id_a, answer_id_b, explanation, source, flagged_by, status, detected_at"#,
     )
     .bind(answer_id)
     .bind(req.contradicts_answer_id)
     .bind(&req.explanation)
     .bind(auth.user_id)
-    .fetch_one(&state.db)
+    .fetch_optional(&state.db)
     .await
-    .map_err(|e| { tracing::error!("flag contradiction failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+    .map_err(|e| { tracing::error!("flag contradiction failed: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?
+    .ok_or(StatusCode::CONFLICT)?;
 
     Ok((
         StatusCode::CREATED,
@@ -240,7 +242,8 @@ async fn do_detect(
         if text != "NO" && !text.to_lowercase().starts_with("no") {
             sqlx::query(
                 r#"INSERT INTO contradiction_flags (answer_id_a, answer_id_b, explanation, source)
-                   VALUES ($1, $2, $3, 'auto')"#,
+                   VALUES ($1, $2, $3, 'auto')
+                   ON CONFLICT (LEAST(answer_id_a, answer_id_b), GREATEST(answer_id_a, answer_id_b)) DO NOTHING"#,
             )
             .bind(answer_id)
             .bind(other_id)

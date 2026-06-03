@@ -99,26 +99,33 @@ async fn delete_me(
     State(state): State<AppState>,
     auth: AuthUser,
 ) -> Result<StatusCode, StatusCode> {
-    // Anonymize ratings (null out PII fields)
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
     sqlx::query(
         "UPDATE ratings SET rater_original_query = NULL, comment = NULL WHERE rater_id = $1",
     )
     .bind(auth.user_id)
-    .execute(&state.db)
+    .execute(&mut *tx)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // Anonymize contradiction flags
     sqlx::query("UPDATE contradiction_flags SET flagged_by = NULL WHERE flagged_by = $1")
         .bind(auth.user_id)
-        .execute(&state.db)
+        .execute(&mut *tx)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // Anonymize user record (keep for FK integrity)
     sqlx::query("UPDATE users SET display_name = 'Deleted User', email = NULL, avatar_url = NULL, provider_id = '' WHERE id = $1")
         .bind(auth.user_id)
-        .execute(&state.db)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    tx.commit()
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
