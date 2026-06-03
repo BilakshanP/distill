@@ -72,3 +72,42 @@ pub async fn set_user_quota(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(StatusCode::NO_CONTENT)
 }
+
+#[derive(Serialize)]
+pub struct ReEmbedResponse {
+    pub enqueued: i64,
+}
+
+/// Enqueue re-embedding jobs for questions with outdated embedding_version.
+pub async fn re_embed(
+    State(state): State<AppState>,
+    _auth: AdminUser,
+) -> Result<Json<ReEmbedResponse>, StatusCode> {
+    let model = state
+        .llm_embedding_model
+        .as_deref()
+        .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+
+    let rows = sqlx::query_as::<_, (uuid::Uuid, String)>(
+        "SELECT id, original_query FROM questions WHERE embedding_version < $1",
+    )
+    .bind(crate::EMBEDDING_VERSION)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let count = rows.len() as i64;
+    for (qid, text) in rows {
+        let _ = crate::jobs::enqueue(
+            &state.db,
+            &crate::jobs::JobPayload::GenerateEmbedding {
+                question_id: qid,
+                text,
+                model: model.to_string(),
+            },
+        )
+        .await;
+    }
+
+    Ok(Json(ReEmbedResponse { enqueued: count }))
+}

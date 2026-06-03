@@ -5,6 +5,10 @@ pub mod jobs;
 pub mod routes;
 pub mod services;
 
+/// Bump this when embedding pipeline changes (model, chunking, normalization).
+/// Re-embed endpoint targets questions with version < this value.
+pub const EMBEDDING_VERSION: i32 = 1;
+
 use axum::{extract::State, http::StatusCode, routing::get, Json, Router};
 use sqlx::PgPool;
 use tower_http::trace::TraceLayer;
@@ -200,6 +204,10 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/admin/user-quota",
             axum::routing::put(routes::admin::set_user_quota),
+        )
+        .route(
+            "/admin/re-embed",
+            axum::routing::post(routes::admin::re_embed),
         )
         .route("/graph", get(routes::graph::get_graph))
         .route(
