@@ -18,6 +18,10 @@ pub struct AnswerResponse {
     pub body: String,
     pub is_stale: bool,
     pub created_at: chrono::DateTime<chrono::Utc>,
+    pub rating_count: i64,
+    pub rating_avg: Option<f64>,
+    pub rating_positive_pct: Option<f64>, // for thumbs: % who liked
+    pub comment_count: i64,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -101,6 +105,10 @@ pub async fn edit_answer(
         author_type: row.3,
         body: row.4,
         is_stale: row.5,
+        rating_count: 0,
+        rating_avg: None,
+        rating_positive_pct: None,
+        comment_count: 0,
         created_at: row.6,
     }))
 }
@@ -148,6 +156,62 @@ pub async fn get_history(
     }))
 }
 
+#[derive(Deserialize, ToSchema)]
+pub struct CreateAnswerRequest {
+    pub body: String,
+}
+
+#[utoipa::path(post, path = "/questions/{id}/answers", request_body = CreateAnswerRequest, responses((status = 201, body = AnswerResponse)), tag = "answers")]
+pub async fn create_answer(
+    State(state): State<AppState>,
+    Path(question_id): Path<Uuid>,
+    auth: AuthUser,
+    Json(req): Json<CreateAnswerRequest>,
+) -> Result<(StatusCode, Json<AnswerResponse>), StatusCode> {
+    let row = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            Uuid,
+            Option<Uuid>,
+            String,
+            String,
+            bool,
+            chrono::DateTime<chrono::Utc>,
+        ),
+    >(
+        r#"INSERT INTO answers (question_id, author_id, author_type, body)
+           VALUES ($1, $2, 'human', $3)
+           RETURNING id, question_id, author_id, author_type, body, is_stale, created_at"#,
+    )
+    .bind(question_id)
+    .bind(auth.user_id)
+    .bind(&req.body)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| {
+        tracing::error!("create answer failed: {:?}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(AnswerResponse {
+            id: row.0,
+            question_id: row.1,
+            author_id: row.2,
+            author_type: row.3,
+            body: row.4,
+            is_stale: row.5,
+            created_at: row.6,
+            rating_count: 0,
+            rating_avg: None,
+            rating_positive_pct: None,
+            comment_count: 0,
+        }),
+    ))
+}
+
 #[utoipa::path(get, path = "/questions/{id}/answers", responses((status = 200, body = Vec<AnswerResponse>)), tag = "answers", security(()))]
 pub async fn get_answers(
     State(state): State<AppState>,
@@ -163,10 +227,29 @@ pub async fn get_answers(
             String,
             bool,
             chrono::DateTime<chrono::Utc>,
+            i64,
+            Option<f64>,
+            Option<f64>,
+            i64,
         ),
     >(
-        r#"SELECT id, question_id, author_id, author_type, body, is_stale, created_at
-           FROM answers WHERE question_id = $1 ORDER BY created_at ASC"#,
+        r#"SELECT a.id, a.question_id, a.author_id, a.author_type, a.body, a.is_stale, a.created_at,
+                  COALESCE(rs.cnt, 0) AS rating_count,
+                  rs.avg_score AS rating_avg,
+                  rs.positive_pct AS rating_positive_pct,
+                  COALESCE(cc.cnt, 0) AS comment_count
+           FROM answers a
+           LEFT JOIN LATERAL (
+               SELECT COUNT(*) AS cnt,
+                      AVG(score)::float8 AS avg_score,
+                      (COUNT(*) FILTER (WHERE score >= 4) * 100.0 / NULLIF(COUNT(*), 0))::float8 AS positive_pct
+               FROM ratings WHERE answer_id = a.id
+           ) rs ON true
+           LEFT JOIN LATERAL (
+               SELECT COUNT(*) AS cnt FROM comments WHERE answer_id = a.id
+           ) cc ON true
+           WHERE a.question_id = $1
+           ORDER BY a.created_at ASC"#,
     )
     .bind(question_id)
     .fetch_all(&state.db)
@@ -186,6 +269,10 @@ pub async fn get_answers(
                 body: r.4,
                 is_stale: r.5,
                 created_at: r.6,
+                rating_count: r.7,
+                rating_avg: r.8,
+                rating_positive_pct: r.9,
+                comment_count: r.10,
             })
             .collect(),
     ))
@@ -252,6 +339,10 @@ pub async fn mark_stale(
         author_type: row.3,
         body: row.4,
         is_stale: row.5,
+        rating_count: 0,
+        rating_avg: None,
+        rating_positive_pct: None,
+        comment_count: 0,
         created_at: row.6,
     }))
 }

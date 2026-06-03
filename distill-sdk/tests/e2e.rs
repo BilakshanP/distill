@@ -38,6 +38,7 @@ async fn start_server() -> (String, Uuid) {
         base_url: "http://localhost:0".into(),
         llm_chat_model: None,
         llm_embedding_model: None,
+        admin_emails: std::collections::HashSet::new(),
     };
 
     let app = build_router(state);

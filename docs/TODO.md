@@ -56,6 +56,16 @@ Build a terminal client for interacting with Distill without a browser. Could us
 
 ---
 
+## Real-time Features
+
+**Websocket/SSE for live AI answers:**
+When a question is submitted and AI answer generation starts, stream progress to the client. TUI could show "generating..." then render the answer as it arrives.
+
+**Notifications:**
+Notify users when their questions get new answers, or when contradictions are detected on answers they wrote/rated.
+
+---
+
 ## Web UI
 
 Frontend for browsing questions, submitting, viewing the knowledge graph, admin dashboard.

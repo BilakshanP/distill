@@ -64,6 +64,14 @@ impl Client {
     }
 
     // Auth
+    pub async fn get_auth_config(&self) -> Result<AuthConfig, Error> {
+        let resp = self
+            .request(reqwest::Method::GET, "/auth/config")
+            .send()
+            .await?;
+        Self::handle(resp).await
+    }
+
     pub async fn delete_account(&self) -> Result<(), Error> {
         let resp = self.request(reqwest::Method::DELETE, "/me").send().await?;
         Self::handle_no_body(resp).await
@@ -76,9 +84,20 @@ impl Client {
         body: &str,
         tags: &[&str],
     ) -> Result<QuestionResponse, Error> {
+        self.create_question_with_options(title, body, tags, None)
+            .await
+    }
+
+    pub async fn create_question_with_options(
+        &self,
+        title: &str,
+        body: &str,
+        tags: &[&str],
+        generate_ai_answer: Option<bool>,
+    ) -> Result<QuestionResponse, Error> {
         let resp = self
             .request(reqwest::Method::POST, "/questions")
-            .json(&serde_json::json!({ "title": title, "body": body, "tags": tags }))
+            .json(&serde_json::json!({ "title": title, "body": body, "tags": tags, "generate_ai_answer": generate_ai_answer }))
             .send()
             .await?;
         Self::handle(resp).await
@@ -134,6 +153,22 @@ impl Client {
     }
 
     // Answers
+    pub async fn create_answer(
+        &self,
+        question_id: Uuid,
+        body: &str,
+    ) -> Result<AnswerResponse, Error> {
+        let resp = self
+            .request(
+                reqwest::Method::POST,
+                &format!("/questions/{}/answers", question_id),
+            )
+            .json(&serde_json::json!({ "body": body }))
+            .send()
+            .await?;
+        Self::handle(resp).await
+    }
+
     pub async fn get_answers(&self, question_id: Uuid) -> Result<Vec<AnswerResponse>, Error> {
         let resp = self
             .request(

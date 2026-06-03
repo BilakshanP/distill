@@ -17,6 +17,8 @@ pub struct CreateQuestionRequest {
     pub tags: Vec<String>,
     #[serde(default = "default_metadata")]
     pub metadata: serde_json::Value,
+    /// Request AI answer generation (respects server answer_mode config)
+    pub generate_ai_answer: Option<bool>,
 }
 
 fn default_metadata() -> serde_json::Value {
@@ -112,16 +114,19 @@ pub async fn create_question(
         .await;
     }
 
-    // Generate AI answer in background (respects answer_mode config)
+    // Generate AI answer in background (respects answer_mode config + user preference)
     if let Some(chat_model) = &state.llm_chat_model {
         let config = crate::routes::get_config_map(&state.db).await;
-        let answer_mode = config
-            .get("answer_mode")
-            .map(|s| s.as_str())
-            .unwrap_or("ai-first");
-        if answer_mode != "community-only"
-            && crate::routes::llm_cache::check_budget(&state.db, &config).await
-        {
+        let answer_mode = crate::config_enums::AnswerMode::from_config(&config);
+
+        let should_generate = match answer_mode {
+            crate::config_enums::AnswerMode::Always => true,
+            crate::config_enums::AnswerMode::Never => false,
+            crate::config_enums::AnswerMode::OptIn => req.generate_ai_answer.unwrap_or(false),
+            crate::config_enums::AnswerMode::OptOut => req.generate_ai_answer.unwrap_or(true),
+        };
+
+        if should_generate && crate::routes::llm_cache::check_budget(&state.db, &config).await {
             let _ = crate::jobs::enqueue(
                 &state.db,
                 &crate::jobs::JobPayload::GenerateAiAnswer {
@@ -344,13 +349,10 @@ pub async fn search_questions(
         .get("rrf_weight_vector")
         .and_then(|v| v.parse().ok())
         .unwrap_or(1.0);
-    let search_mode = config
-        .get("search_mode")
-        .map(|s| s.as_str())
-        .unwrap_or("hybrid");
+    let search_mode = crate::config_enums::SearchMode::from_config(&config);
 
     // Generate embedding for the query if model is configured and search_mode is hybrid
-    let query_embedding = if search_mode == "hybrid" {
+    let query_embedding = if search_mode == crate::config_enums::SearchMode::Hybrid {
         if let Some(model) = &state.llm_embedding_model {
             let client = genai::Client::default();
             match tokio::time::timeout(
@@ -466,12 +468,14 @@ pub async fn search_questions(
         })?
     };
 
-    let mode_used =
-        if !results.is_empty() && search_mode == "hybrid" && state.llm_embedding_model.is_some() {
-            "hybrid"
-        } else {
-            "keyword"
-        };
+    let mode_used = if !results.is_empty()
+        && search_mode == crate::config_enums::SearchMode::Hybrid
+        && state.llm_embedding_model.is_some()
+    {
+        "hybrid"
+    } else {
+        "keyword"
+    };
 
     let mut headers = axum::http::HeaderMap::new();
     headers.insert("X-Search-Mode", mode_used.parse().unwrap());

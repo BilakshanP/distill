@@ -36,6 +36,7 @@ async fn main() {
         base_url: cfg.base_url,
         llm_chat_model: cfg.llm_chat_model.clone(),
         llm_embedding_model: cfg.llm_embedding_model.clone(),
+        admin_emails: cfg.admin_emails.clone(),
     };
 
     if cfg.llm_chat_model.is_none() || cfg.llm_embedding_model.is_none() {

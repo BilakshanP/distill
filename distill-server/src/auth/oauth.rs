@@ -22,6 +22,31 @@ struct GitHubUser {
     avatar_url: Option<String>,
 }
 
+#[derive(Deserialize)]
+struct GitHubEmail {
+    email: String,
+    primary: bool,
+    verified: bool,
+}
+
+/// Fetch primary verified email from GitHub (handles private email settings)
+async fn fetch_github_email(access_token: &str) -> Option<String> {
+    let emails: Vec<GitHubEmail> = reqwest::Client::new()
+        .get("https://api.github.com/user/emails")
+        .header("Authorization", format!("Bearer {}", access_token))
+        .header("User-Agent", "distill")
+        .send()
+        .await
+        .ok()?
+        .json()
+        .await
+        .ok()?;
+    emails
+        .into_iter()
+        .find(|e| e.primary && e.verified)
+        .map(|e| e.email)
+}
+
 type GhOAuthClient = oauth2::Client<
     oauth2::StandardErrorResponse<oauth2::basic::BasicErrorResponseType>,
     oauth2::StandardTokenResponse<oauth2::EmptyExtraTokenFields, oauth2::basic::BasicTokenType>,
@@ -94,6 +119,11 @@ pub async fn github_callback(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    let email = gh_user
+        .email
+        .clone()
+        .or(fetch_github_email(access_token).await);
+
     // Upsert user
     let user = sqlx::query_as::<_, (uuid::Uuid, uuid::Uuid)>(
         r#"INSERT INTO users (provider, provider_id, display_name, email, avatar_url)
@@ -106,7 +136,7 @@ pub async fn github_callback(
     )
     .bind(gh_user.id.to_string())
     .bind(&gh_user.login)
-    .bind(&gh_user.email)
+    .bind(&email)
     .bind(&gh_user.avatar_url)
     .fetch_one(&state.db)
     .await
@@ -117,6 +147,17 @@ pub async fn github_callback(
     } else {
         Some(user.1)
     };
+
+    // Auto-promote if email matches ADMIN_EMAILS
+    if let Some(ref email) = email {
+        if state.admin_emails.contains(&email.to_lowercase()) {
+            sqlx::query("UPDATE users SET role = 'admin' WHERE id = $1 AND role != 'admin'")
+                .bind(user.0)
+                .execute(&state.db)
+                .await
+                .ok();
+        }
+    }
 
     let jwt = jwt::create_token_with_tenant(user.0, tenant_id, &state.jwt_secret)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -217,8 +258,99 @@ pub async fn google_callback(
         Some(user.1)
     };
 
+    if let Some(ref email) = google_user.email {
+        if state.admin_emails.contains(&email.to_lowercase()) {
+            sqlx::query("UPDATE users SET role = 'admin' WHERE id = $1 AND role != 'admin'")
+                .bind(user.0)
+                .execute(&state.db)
+                .await
+                .ok();
+        }
+    }
+
     let jwt = jwt::create_token_with_tenant(user.0, tenant_id, &state.jwt_secret)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(serde_json::json!({ "token": jwt })))
+}
+
+// === Token Exchange (for CLI device flow / direct token auth) ===
+
+#[derive(Deserialize)]
+pub struct TokenExchangeRequest {
+    pub provider: String, // "github" or "google"
+    pub access_token: String,
+}
+
+pub async fn exchange_token(
+    State(state): State<AppState>,
+    Json(req): Json<TokenExchangeRequest>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    match req.provider.as_str() {
+        "github" => {
+            let gh_user: GitHubUser = reqwest::Client::new()
+                .get("https://api.github.com/user")
+                .header("Authorization", format!("Bearer {}", req.access_token))
+                .header("User-Agent", "distill")
+                .send()
+                .await
+                .map_err(|_| StatusCode::UNAUTHORIZED)?
+                .json()
+                .await
+                .map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+            let email = gh_user
+                .email
+                .clone()
+                .or(fetch_github_email(&req.access_token).await);
+
+            let user = sqlx::query_as::<_, (uuid::Uuid, uuid::Uuid)>(
+                r#"INSERT INTO users (provider, provider_id, display_name, email, avatar_url)
+                   VALUES ('github', $1, $2, $3, $4)
+                   ON CONFLICT (provider, provider_id) DO UPDATE SET
+                     display_name = EXCLUDED.display_name,
+                     email = EXCLUDED.email,
+                     avatar_url = EXCLUDED.avatar_url
+                   RETURNING id, tenant_id"#,
+            )
+            .bind(gh_user.id.to_string())
+            .bind(&gh_user.login)
+            .bind(&email)
+            .bind(&gh_user.avatar_url)
+            .fetch_one(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+            let tenant_id = if user.1 == uuid::Uuid::nil() {
+                None
+            } else {
+                Some(user.1)
+            };
+
+            if let Some(ref e) = email {
+                if state.admin_emails.contains(&e.to_lowercase()) {
+                    sqlx::query(
+                        "UPDATE users SET role = 'admin' WHERE id = $1 AND role != 'admin'",
+                    )
+                    .bind(user.0)
+                    .execute(&state.db)
+                    .await
+                    .ok();
+                }
+            }
+
+            let jwt = jwt::create_token_with_tenant(user.0, tenant_id, &state.jwt_secret)
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+            Ok(Json(serde_json::json!({ "token": jwt })))
+        }
+        _ => Err(StatusCode::BAD_REQUEST),
+    }
+}
+
+pub async fn auth_config(State(state): State<AppState>) -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "github_client_id": state.github_client_id,
+        "google_enabled": state.google_client_id.is_some(),
+    }))
 }

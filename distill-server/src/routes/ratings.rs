@@ -76,17 +76,15 @@ pub async fn create_rating(
     Json(req): Json<CreateRatingRequest>,
 ) -> Result<(StatusCode, Json<RatingResponse>), StatusCode> {
     let config = crate::routes::get_config_map(&state.db).await;
-    let visibility = config
-        .get("rater_context_visibility")
-        .map(|s| s.as_str())
-        .unwrap_or("optional");
+    let visibility = crate::config_enums::RaterContextVisibility::from_config(&config);
 
     // Determine what context to store based on config
     let (comment, query) = match visibility {
-        "never" => (None, None),
-        "always" => (req.comment.clone(), req.rater_original_query.clone()),
-        _ => {
-            // optional: respect rater's choice
+        crate::config_enums::RaterContextVisibility::Never => (None, None),
+        crate::config_enums::RaterContextVisibility::Always => {
+            (req.comment.clone(), req.rater_original_query.clone())
+        }
+        crate::config_enums::RaterContextVisibility::Optional => {
             if req.include_context {
                 (req.comment.clone(), req.rater_original_query.clone())
             } else {

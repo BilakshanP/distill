@@ -2,6 +2,7 @@ use axum_test::TestServer;
 use distill_server::{auth::jwt, build_router, AppState};
 use sqlx::migrate::Migrator;
 use sqlx::postgres::PgPoolOptions;
+use std::collections::HashSet;
 use uuid::Uuid;
 
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
@@ -29,6 +30,7 @@ async fn setup() -> TestServer {
         base_url: "http://localhost:3000".into(),
         llm_chat_model: None,
         llm_embedding_model: None,
+        admin_emails: HashSet::new(),
     };
 
     let app = build_router(state);

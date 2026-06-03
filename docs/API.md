@@ -19,6 +19,7 @@ Endpoints marked **Admin** require the user to have `role=admin`.
 |--------|------|------|-------------|
 | GET | `/auth/github` | No | Start GitHub OAuth flow |
 | GET | `/auth/github/callback` | No | OAuth callback (returns JWT) |
+| GET | `/auth/config` | No | Returns `github_client_id` and `google_enabled` |
 | GET | `/me` | Yes | Current user profile |
 | DELETE | `/me` | Yes | Delete account (anonymizes contributions, scrubs PII) |
 

@@ -47,6 +47,12 @@ pub struct AnswerResponse {
     pub body: String,
     pub is_stale: bool,
     pub created_at: chrono::DateTime<chrono::Utc>,
+    #[serde(default)]
+    pub rating_count: i64,
+    pub rating_avg: Option<f64>,
+    pub rating_positive_pct: Option<f64>,
+    #[serde(default)]
+    pub comment_count: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -173,4 +179,10 @@ pub struct JobResponse {
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub started_at: Option<chrono::DateTime<chrono::Utc>>,
     pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AuthConfig {
+    pub github_client_id: String,
+    pub google_enabled: bool,
 }

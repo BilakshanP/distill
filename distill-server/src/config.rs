@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::env;
 
 pub struct Config {
@@ -13,10 +14,18 @@ pub struct Config {
     pub base_url: String,
     pub llm_chat_model: Option<String>,
     pub llm_embedding_model: Option<String>,
+    pub admin_emails: HashSet<String>,
 }
 
 impl Config {
     pub fn from_env() -> Self {
+        let admin_emails: HashSet<String> = env::var("ADMIN_EMAILS")
+            .unwrap_or_default()
+            .split(',')
+            .map(|s| s.trim().to_lowercase())
+            .filter(|s| !s.is_empty())
+            .collect();
+
         Self {
             database_url: env::var("DATABASE_URL").expect("DATABASE_URL must be set"),
             host: env::var("HOST").unwrap_or_else(|_| "0.0.0.0".into()),
@@ -41,6 +50,7 @@ impl Config {
             llm_embedding_model: env::var("LLM_EMBEDDING_MODEL")
                 .ok()
                 .filter(|s| !s.is_empty()),
+            admin_emails,
         }
     }
 }

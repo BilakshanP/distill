@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod config;
+pub mod config_enums;
 pub mod error;
 pub mod jobs;
 pub mod routes;
@@ -11,6 +12,7 @@ pub const EMBEDDING_VERSION: i32 = 1;
 
 use axum::{extract::State, http::StatusCode, routing::get, Json, Router};
 use sqlx::PgPool;
+use std::collections::HashSet;
 use tower_http::trace::TraceLayer;
 #[cfg(debug_assertions)]
 use utoipa::OpenApi;
@@ -123,6 +125,7 @@ pub struct AppState {
     pub base_url: String,
     pub llm_chat_model: Option<String>,
     pub llm_embedding_model: Option<String>,
+    pub admin_emails: HashSet<String>,
 }
 
 async fn health(State(state): State<AppState>) -> Result<Json<serde_json::Value>, StatusCode> {
@@ -200,6 +203,11 @@ pub fn build_router(state: AppState) -> Router {
         .route("/auth/github/callback", get(auth::oauth::github_callback))
         .route("/auth/google", get(auth::oauth::google_login))
         .route("/auth/google/callback", get(auth::oauth::google_callback))
+        .route(
+            "/auth/token",
+            axum::routing::post(auth::oauth::exchange_token),
+        )
+        .route("/auth/config", get(auth::oauth::auth_config))
         .route("/me", get(me).delete(delete_me))
         .route(
             "/questions",
@@ -215,7 +223,10 @@ pub fn build_router(state: AppState) -> Router {
             axum::routing::post(routes::questions::preview_question),
         )
         .route("/questions/{id}", get(routes::questions::get_question))
-        .route("/questions/{id}/answers", get(routes::answers::get_answers))
+        .route(
+            "/questions/{id}/answers",
+            get(routes::answers::get_answers).post(routes::answers::create_answer),
+        )
         .route(
             "/answers/{id}",
             axum::routing::put(routes::answers::edit_answer),
