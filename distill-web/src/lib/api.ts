@@ -112,7 +112,7 @@ export const api = {
 	createAnswer: (questionId: string, body: string) =>
 		request<Answer>('POST', `/questions/${questionId}/answers`, { body }),
 	rateAnswer: (answerId: string, score: number) =>
-		request<void>('POST', `/answers/${answerId}/rate`, { score }),
+		request<void>('POST', `/answers/${answerId}/ratings`, { score }),
 
 	// Comments
 	getQuestionComments: (questionId: string) =>

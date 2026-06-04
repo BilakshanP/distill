@@ -7,6 +7,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Separator } from '$lib/components/ui/separator';
 	import { Textarea } from '$lib/components/ui/textarea';
+	import Markdown from '$lib/components/Markdown.svelte';
 
 	let question = $state<Question | null>(null);
 	let answers = $state<Answer[]>([]);
@@ -59,7 +60,7 @@
 {#if question}
 	<article class="space-y-4">
 		<h1 class="text-2xl font-bold tracking-tight">{question.title}</h1>
-		<p class="text-muted-foreground text-sm whitespace-pre-wrap">{question.body}</p>
+		<Markdown content={question.body} />
 		{#if question.tags.length > 0}
 			<div class="flex gap-1.5 flex-wrap">
 				{#each question.tags as tag}
@@ -92,7 +93,7 @@
 					</div>
 				</Card.Header>
 				<Card.Content>
-					<p class="text-sm whitespace-pre-wrap">{a.body}</p>
+					<Markdown content={a.body} />
 				</Card.Content>
 				{#if isLoggedIn()}
 					<Card.Footer>
