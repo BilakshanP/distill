@@ -12,9 +12,17 @@ pub struct WikiAnswerResponse {
     pub body: String,
     pub author_id: Option<Uuid>,
     pub last_editor_id: Option<Uuid>,
+    pub last_editor_name: Option<String>,
+    pub last_editor_role: Option<String>,
     pub is_stale: bool,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
+    // Lifetime stats
+    pub rating_count: i64,
+    pub rating_avg: Option<f64>,
+    // Since last edit stats
+    pub rating_count_since_edit: i64,
+    pub rating_avg_since_edit: Option<f64>,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -45,27 +53,58 @@ pub async fn get_wiki_answer(
     State(state): State<AppState>,
     Path(question_id): Path<Uuid>,
 ) -> Result<Json<WikiAnswerResponse>, StatusCode> {
-    let row = sqlx::query_as::<_, (Uuid, Uuid, String, Option<Uuid>, Option<Uuid>, bool, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(
-        "SELECT id, question_id, body, author_id, last_editor_id, is_stale, created_at, updated_at FROM wiki_answers WHERE question_id = $1"
+    let row = sqlx::query_as::<_, (Uuid, Uuid, String, Option<Uuid>, Option<Uuid>, bool, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>, Option<String>, Option<String>)>(
+        r#"SELECT w.id, w.question_id, w.body, w.author_id, w.last_editor_id, w.is_stale, w.created_at, w.updated_at,
+                  u.display_name, u.role
+           FROM wiki_answers w
+           LEFT JOIN users u ON u.id = w.last_editor_id
+           WHERE w.question_id = $1"#
     )
     .bind(question_id)
     .fetch_optional(&state.db)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    match row {
-        Some(r) => Ok(Json(WikiAnswerResponse {
-            id: r.0,
-            question_id: r.1,
-            body: r.2,
-            author_id: r.3,
-            last_editor_id: r.4,
-            is_stale: r.5,
-            created_at: r.6,
-            updated_at: r.7,
-        })),
-        None => Err(StatusCode::NOT_FOUND),
-    }
+    let r = match row {
+        Some(r) => r,
+        None => return Err(StatusCode::NOT_FOUND),
+    };
+
+    // Lifetime rating stats
+    let lifetime: (i64, Option<f64>) = sqlx::query_as(
+        "SELECT COUNT(*), AVG(score)::float8 FROM answer_ratings WHERE wiki_answer_id = $1",
+    )
+    .bind(r.0)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or((0, None));
+
+    // Since last edit stats
+    let since_edit: (i64, Option<f64>) = sqlx::query_as(
+        "SELECT COUNT(*), AVG(score)::float8 FROM answer_ratings WHERE wiki_answer_id = $1 AND created_at >= $2",
+    )
+    .bind(r.0)
+    .bind(r.7)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or((0, None));
+
+    Ok(Json(WikiAnswerResponse {
+        id: r.0,
+        question_id: r.1,
+        body: r.2,
+        author_id: r.3,
+        last_editor_id: r.4,
+        last_editor_name: r.8,
+        last_editor_role: r.9,
+        is_stale: r.5,
+        created_at: r.6,
+        updated_at: r.7,
+        rating_count: lifetime.0,
+        rating_avg: lifetime.1,
+        rating_count_since_edit: since_edit.0,
+        rating_avg_since_edit: since_edit.1,
+    }))
 }
 
 pub async fn edit_wiki_answer(
@@ -120,9 +159,15 @@ pub async fn edit_wiki_answer(
         body: row.2,
         author_id: row.3,
         last_editor_id: row.4,
+        last_editor_name: None, // just edited, no need to re-query
+        last_editor_role: None,
         is_stale: row.5,
         created_at: row.6,
         updated_at: row.7,
+        rating_count: 0,
+        rating_avg: None,
+        rating_count_since_edit: 0,
+        rating_avg_since_edit: None,
     }))
 }
 

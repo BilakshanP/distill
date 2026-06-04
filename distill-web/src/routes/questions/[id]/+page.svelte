@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
-	import { api, type Question, type Answer, type Discussion, isLoggedIn } from '$lib/api';
+	import { api, type Question, type Answer, type Discussion, isLoggedIn, getUserId } from '$lib/api';
 	import { onMount } from 'svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
@@ -119,9 +119,26 @@
 				<Card.Content class="pt-6">
 					<Markdown content={wikiAnswer.body} />
 				</Card.Content>
-				<Card.Footer class="text-xs text-muted-foreground flex justify-between">
-					<span>Last updated: {new Date(wikiAnswer.updated_at).toLocaleDateString()}</span>
-					<a href="/questions/{id}/history" class="hover:text-foreground">View history</a>
+				<Card.Footer class="text-xs text-muted-foreground flex flex-col gap-2">
+					<div class="flex justify-between w-full">
+						<span>
+							{#if wikiAnswer.last_editor_name}
+								Edited by
+								<span class={wikiAnswer.last_editor_role === 'admin' ? 'text-amber-600 font-medium' : 'font-medium'}>{wikiAnswer.last_editor_name}</span>
+								{#if wikiAnswer.last_editor_role === 'admin'}<span class="text-amber-600">[admin]</span>{/if}
+							{/if}
+							 — {new Date(wikiAnswer.updated_at).toLocaleDateString()}
+						</span>
+						<a href="/questions/{id}/history" class="hover:text-foreground">View history</a>
+					</div>
+					{#if wikiAnswer.rating_count > 0}
+						<div class="flex gap-4 w-full">
+							<span>Lifetime: ★ {wikiAnswer.rating_avg?.toFixed(1)} ({wikiAnswer.rating_count} ratings)</span>
+							{#if wikiAnswer.rating_count_since_edit > 0}
+								<span>Since last edit: ★ {wikiAnswer.rating_avg_since_edit?.toFixed(1)} ({wikiAnswer.rating_count_since_edit})</span>
+							{/if}
+						</div>
+					{/if}
 				</Card.Footer>
 			</Card.Root>
 		{:else}
@@ -136,7 +153,8 @@
 		<h2 class="text-lg font-semibold">Discussion ({discussions.length})</h2>
 
 		{#snippet threadNode(node: any)}
-			<div class="border-l-2 border-border pl-4 py-2" style="margin-left: {node.depth * 16}px">
+			{@const isOwn = node.author_id === getUserId()}
+			<div class="border-l-2 {isOwn ? 'border-primary/50 bg-primary/5' : 'border-border'} pl-4 py-2 rounded-r" style="margin-left: {node.depth * 16}px">
 				<div class="flex items-center gap-2 text-xs text-muted-foreground mb-1">
 					<div class="flex items-center gap-1">
 						{#if isLoggedIn()}
@@ -151,6 +169,9 @@
 								onclick={() => vote(node.id, -1)}>▼</button>
 						{/if}
 					</div>
+					<span class="font-medium {node.author_role === 'admin' ? 'text-amber-600' : 'text-foreground'}">{node.author_name}</span>
+					{#if node.author_role === 'admin'}<span class="text-amber-600 text-[10px]">[admin]</span>{/if}
+					{#if isOwn}<span class="text-primary text-[10px]">(you)</span>{/if}
 					<span>{new Date(node.created_at).toLocaleDateString()}</span>
 				</div>
 				<Markdown content={node.body} />

@@ -64,9 +64,15 @@ export interface Answer {
 	body: string;
 	author_id: string | null;
 	last_editor_id: string | null;
+	last_editor_name: string | null;
+	last_editor_role: string | null;
 	is_stale: boolean;
 	created_at: string;
 	updated_at: string;
+	rating_count: number;
+	rating_avg: number | null;
+	rating_count_since_edit: number;
+	rating_avg_since_edit: number | null;
 }
 
 export interface Discussion {
@@ -74,6 +80,9 @@ export interface Discussion {
 	question_id: string;
 	parent_id: string | null;
 	author_id: string;
+	author_name: string;
+	author_role: string;
+	author_avatar: string | null;
 	body: string;
 	depth: number;
 	is_deleted: boolean;

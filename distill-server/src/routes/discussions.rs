@@ -11,6 +11,9 @@ pub struct DiscussionResponse {
     pub question_id: Uuid,
     pub parent_id: Option<Uuid>,
     pub author_id: Uuid,
+    pub author_name: String,
+    pub author_role: String,
+    pub author_avatar: Option<String>,
     pub body: String,
     pub depth: i32,
     pub is_deleted: bool,
@@ -83,6 +86,14 @@ pub async fn create_discussion(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
+    // Fetch author info
+    let author: (String, String, Option<String>) =
+        sqlx::query_as("SELECT display_name, role, avatar_url FROM users WHERE id = $1")
+            .bind(auth.user_id)
+            .fetch_one(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
     Ok((
         StatusCode::CREATED,
         Json(DiscussionResponse {
@@ -95,6 +106,9 @@ pub async fn create_discussion(
             is_deleted: row.6,
             score: 0,
             user_vote: None,
+            author_name: author.0,
+            author_role: author.1,
+            author_avatar: author.2,
             created_at: row.7,
         }),
     ))
@@ -115,14 +129,16 @@ pub async fn list_discussions(
         .map(|claims| claims.sub)
         .unwrap_or(Uuid::nil());
 
-    let rows = sqlx::query_as::<_, (Uuid, Uuid, Option<Uuid>, Uuid, String, i32, bool, chrono::DateTime<chrono::Utc>, i64, Option<i16>)>(
+    let rows = sqlx::query_as::<_, (Uuid, Uuid, Option<Uuid>, Uuid, String, i32, bool, chrono::DateTime<chrono::Utc>, i64, Option<i16>, String, String, Option<String>)>(
         r#"SELECT d.id, d.question_id, d.parent_id, d.author_id, d.body, d.depth, d.is_deleted, d.created_at,
                   COALESCE(SUM(v.direction), 0) AS score,
-                  (SELECT direction FROM discussion_votes WHERE discussion_id = d.id AND user_id = $3) AS user_vote
+                  (SELECT direction FROM discussion_votes WHERE discussion_id = d.id AND user_id = $3) AS user_vote,
+                  u.display_name, u.role, u.avatar_url
            FROM discussions d
+           JOIN users u ON u.id = d.author_id
            LEFT JOIN discussion_votes v ON v.discussion_id = d.id
            WHERE d.question_id = $1 AND ($2::uuid IS NULL OR d.parent_id = $2)
-           GROUP BY d.id
+           GROUP BY d.id, u.display_name, u.role, u.avatar_url
            ORDER BY COALESCE(SUM(v.direction), 0) DESC, d.created_at ASC
            LIMIT $4"#
     )
@@ -146,6 +162,9 @@ pub async fn list_discussions(
                 is_deleted: r.6,
                 score: r.8,
                 user_vote: r.9,
+                author_name: r.10,
+                author_role: r.11,
+                author_avatar: r.12,
                 created_at: r.7,
             })
             .collect(),
