@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
-	import { api, type Question, type Answer, type Discussion, isLoggedIn, getUserId } from '$lib/api';
+	import { api, type Question, type Answer, type Discussion, type IndividualAnswer, isLoggedIn, getUserId } from '$lib/api';
 	import { onMount } from 'svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
@@ -11,11 +11,14 @@
 
 	let question = $state<Question | null>(null);
 	let wikiAnswer = $state<Answer | null>(null);
+	let answers = $state<IndividualAnswer[]>([]);
 	let discussions = $state<Discussion[]>([]);
 	let newComment = $state('');
 	let replyTo = $state<string | null>(null);
 	let replyBody = $state('');
 	let myRating = $state<number | null>(null);
+	let newAnswerBody = $state('');
+	let submittingAnswer = $state(false);
 	let error = $state('');
 
 	const id = $derived($page.params.id!);
@@ -25,6 +28,7 @@
 		try {
 			question = await api.getQuestion(id);
 			try { wikiAnswer = await api.getWikiAnswer(id); } catch {}
+			answers = await api.listAnswers(id);
 			discussions = await api.listDiscussions(id);
 
 			// Fetch own rating if logged in
@@ -53,6 +57,24 @@
 			}
 			// Refresh answer to get updated stats
 			wikiAnswer = await api.getWikiAnswer(id);
+		} catch (e: any) { error = e.message; }
+	}
+
+	async function submitAnswer() {
+		if (!newAnswerBody.trim()) return;
+		submittingAnswer = true;
+		try {
+			const a = await api.createAnswer(id, newAnswerBody);
+			answers = [...answers, a];
+			newAnswerBody = '';
+		} catch (e: any) { error = e.message; }
+		finally { submittingAnswer = false; }
+	}
+
+	async function rateIndividual(answerId: string, score: number) {
+		try {
+			const result = await api.rateAnswer(answerId, score);
+			answers = answers.map(a => a.id === answerId ? { ...a, rating_avg: result.rating_avg, rating_count: result.rating_count } : a);
 		} catch (e: any) { error = e.message; }
 	}
 
@@ -183,6 +205,55 @@
 			</Card.Root>
 		{:else}
 			<p class="text-muted-foreground text-sm">No answer yet. Be the first to contribute!</p>
+		{/if}
+	</section>
+
+	<Separator class="my-8" />
+
+	<!-- Individual Answers -->
+	<section class="space-y-4">
+		<h2 class="text-lg font-semibold">{answers.length} {answers.length === 1 ? 'Answer' : 'Answers'}</h2>
+
+		{#each answers as a}
+			<Card.Root class={a.is_accepted ? 'border-green-500/50' : ''}>
+				<Card.Header>
+					<div class="flex items-center gap-2 text-xs text-muted-foreground">
+						<span class="font-medium {a.author_role === 'admin' ? 'text-amber-600' : 'text-foreground'}">{a.author_name}</span>
+						{#if a.author_role === 'admin'}<span class="text-amber-600">[admin]</span>{/if}
+						{#if a.is_accepted}<Badge variant="default" class="text-[10px]">Accepted</Badge>{/if}
+						{#if a.rating_count > 0}
+							<span>★ {a.rating_avg?.toFixed(1)} ({a.rating_count})</span>
+						{/if}
+						<span>{new Date(a.created_at).toLocaleDateString()}</span>
+					</div>
+				</Card.Header>
+				<Card.Content>
+					<Markdown content={a.body} />
+				</Card.Content>
+				{#if isLoggedIn()}
+					<Card.Footer>
+						<div class="flex items-center gap-1">
+							<span class="text-xs mr-1">Rate:</span>
+							{#each [1, 2, 3, 4, 5] as score}
+								<button
+									class="px-2 py-0.5 text-xs border rounded hover:border-primary/50"
+									onclick={() => rateIndividual(a.id, score)}
+								>{score}</button>
+							{/each}
+						</div>
+					</Card.Footer>
+				{/if}
+			</Card.Root>
+		{/each}
+
+		{#if isLoggedIn()}
+			<div class="space-y-2 pt-2">
+				<h3 class="text-sm font-medium">Your Answer</h3>
+				<Textarea bind:value={newAnswerBody} rows={4} placeholder="Write your answer (markdown)..." />
+				<Button onclick={submitAnswer} disabled={submittingAnswer || !newAnswerBody.trim()}>
+					{submittingAnswer ? 'Submitting...' : 'Post Answer'}
+				</Button>
+			</div>
 		{/if}
 	</section>
 

@@ -26,6 +26,7 @@ pub struct DiscussionResponse {
 pub struct CreateDiscussionRequest {
     pub body: String,
     pub parent_id: Option<Uuid>,
+    pub answer_id: Option<Uuid>,
 }
 
 #[derive(Deserialize)]
@@ -70,12 +71,13 @@ pub async fn create_discussion(
             chrono::DateTime<chrono::Utc>,
         ),
     >(
-        r#"INSERT INTO discussions (question_id, parent_id, author_id, body, depth)
-           VALUES ($1, $2, $3, $4, $5)
+        r#"INSERT INTO discussions (question_id, parent_id, answer_id, author_id, body, depth)
+           VALUES ($1, $2, $3, $4, $5, $6)
            RETURNING id, question_id, parent_id, author_id, body, depth, is_deleted, created_at"#,
     )
     .bind(question_id)
     .bind(req.parent_id)
+    .bind(req.answer_id)
     .bind(auth.user_id)
     .bind(&req.body)
     .bind(depth)

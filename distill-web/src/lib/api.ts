@@ -91,6 +91,20 @@ export interface Discussion {
 	created_at: string;
 }
 
+export interface IndividualAnswer {
+	id: string;
+	question_id: string;
+	author_id: string;
+	author_name: string;
+	author_role: string;
+	body: string;
+	is_accepted: boolean;
+	rating_avg: number | null;
+	rating_count: number;
+	created_at: string;
+	updated_at: string;
+}
+
 export interface VoteResult {
 	score: number;
 	user_vote: number | null;
@@ -169,4 +183,14 @@ export const api = {
 
 	// Tags
 	listTags: () => request<{ tag: string; count: number }[]>('GET', '/tags'),
+
+	// Individual answers
+	listAnswers: (questionId: string) =>
+		request<IndividualAnswer[]>('GET', `/questions/${questionId}/answers`),
+	createAnswer: (questionId: string, body: string) =>
+		request<IndividualAnswer>('POST', `/questions/${questionId}/answers`, { body }),
+	rateAnswer: (answerId: string, score: number) =>
+		request<{ rating_count: number; rating_avg: number | null; your_score: number | null }>('POST', `/answers/${answerId}/ratings`, { score }),
+	deleteAnswerRating: (answerId: string) =>
+		request<void>('DELETE', `/answers/${answerId}/ratings/mine`),
 };

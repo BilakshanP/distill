@@ -55,12 +55,6 @@ impl utoipa::Modify for SecurityAddon {
         routes::questions::get_question,
         routes::questions::search_questions,
         routes::questions::preview_question,
-        routes::answers::get_answers,
-        routes::answers::edit_answer,
-        routes::answers::get_history,
-        routes::answers::mark_stale,
-        routes::answers::dig_deeper,
-        routes::answers::get_deep_dives,
         routes::ratings::create_rating,
         routes::contradictions::flag_contradiction,
         routes::contradictions::get_contradictions_for_answer,
@@ -80,12 +74,6 @@ impl utoipa::Modify for SecurityAddon {
         routes::questions::SearchResult,
         routes::questions::PreviewRequest,
         routes::questions::PreviewResponse,
-        routes::answers::AnswerResponse,
-        routes::answers::EditAnswerRequest,
-        routes::answers::EditHistoryEntry,
-        routes::answers::MarkStaleRequest,
-        routes::answers::DigDeeperRequest,
-        routes::answers::DigDeeperResponse,
         routes::ratings::CreateRatingRequest,
         routes::ratings::RatingResponse,
         routes::contradictions::FlagContradictionRequest,
@@ -226,27 +214,6 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/questions/{id}", get(routes::questions::get_question))
         .route(
-            "/questions/{id}/answers",
-            get(routes::answers::get_answers).post(routes::answers::create_answer),
-        )
-        .route(
-            "/answers/{id}",
-            axum::routing::put(routes::answers::edit_answer),
-        )
-        .route("/answers/{id}/history", get(routes::answers::get_history))
-        .route(
-            "/answers/{id}/dig-deeper",
-            axum::routing::post(routes::answers::dig_deeper),
-        )
-        .route(
-            "/answers/{id}/deep-dives",
-            get(routes::answers::get_deep_dives),
-        )
-        .route(
-            "/answers/{id}/mark-stale",
-            axum::routing::post(routes::answers::mark_stale),
-        )
-        .route(
             "/wiki-answers/{id}/ratings",
             axum::routing::post(routes::ratings::create_rating).get(routes::ratings::get_ratings),
         )
@@ -326,6 +293,19 @@ pub fn build_router(state: AppState) -> Router {
             "/questions/{id}/discussions",
             axum::routing::post(routes::discussions::create_discussion)
                 .get(routes::discussions::list_discussions),
+        )
+        // Individual answers
+        .route(
+            "/questions/{id}/answers",
+            axum::routing::post(routes::answers::create_answer).get(routes::answers::list_answers),
+        )
+        .route(
+            "/answers/{id}/ratings",
+            axum::routing::post(routes::answers::rate_answer),
+        )
+        .route(
+            "/answers/{id}/ratings/mine",
+            axum::routing::delete(routes::answers::delete_answer_rating),
         )
         // Discussion votes
         .route(
