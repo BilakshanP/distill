@@ -254,6 +254,10 @@ pub fn build_router(state: AppState) -> Router {
             axum::routing::put(routes::ratings::redact_rating),
         )
         .route(
+            "/answers/{id}/ratings/mine",
+            axum::routing::delete(routes::ratings::delete_rating),
+        )
+        .route(
             "/answers/{id}/flag-contradiction",
             axum::routing::post(routes::contradictions::flag_contradiction),
         )

@@ -124,7 +124,7 @@ export const api = {
 	rateAnswer: (answerId: string, score: number) =>
 		request<{ id: string; answer_id: string; rater_id: string; score: number }>('POST', `/answers/${answerId}/ratings`, { score }),
 	deleteRating: (answerId: string) =>
-		request<void>('PUT', `/answers/${answerId}/ratings/redact`),
+		request<void>('DELETE', `/answers/${answerId}/ratings/mine`),
 	getRatings: (answerId: string) =>
 		request<Paginated<{ id: string; rater_id: string; score: number }>>('GET', `/answers/${answerId}/ratings`),
 

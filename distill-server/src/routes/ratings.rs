@@ -175,3 +175,17 @@ pub async fn get_ratings(
         has_more,
     }))
 }
+
+pub async fn delete_rating(
+    State(state): State<AppState>,
+    Path(answer_id): Path<Uuid>,
+    auth: AuthUser,
+) -> Result<StatusCode, StatusCode> {
+    sqlx::query("DELETE FROM ratings WHERE answer_id = $1 AND rater_id = $2")
+        .bind(answer_id)
+        .bind(auth.user_id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(StatusCode::NO_CONTENT)
+}
