@@ -50,7 +50,7 @@ pub async fn get_graph(
     // Get question nodes
     let questions = sqlx::query_as::<_, (Uuid, String, i64)>(
         r#"SELECT q.id, q.title, COUNT(a.id) AS answer_count
-           FROM questions q LEFT JOIN answers a ON a.question_id = q.id
+           FROM questions q LEFT JOIN wiki_answers a ON a.question_id = q.id
            GROUP BY q.id ORDER BY q.created_at DESC LIMIT $1"#,
     )
     .bind(limit)
@@ -74,7 +74,7 @@ pub async fn get_graph(
     // Get answer nodes and question->answer edges
     let answers = sqlx::query_as::<_, (Uuid, Uuid, i64)>(
         r#"SELECT a.id, a.question_id, COUNT(r.id) AS rating_count
-           FROM answers a LEFT JOIN ratings r ON r.answer_id = a.id
+           FROM wiki_answers a LEFT JOIN answer_ratings r ON r.wiki_answer_id = a.id
            WHERE a.question_id = ANY($1)
            GROUP BY a.id"#,
     )
@@ -211,7 +211,7 @@ pub async fn get_node_neighborhood(
 
     // Answers to this question
     let answers = sqlx::query_as::<_, (Uuid, String)>(
-        "SELECT id, LEFT(body, 50) FROM answers WHERE question_id = $1",
+        "SELECT id, LEFT(body, 50) FROM wiki_answers WHERE question_id = $1",
     )
     .bind(id)
     .fetch_all(&state.db)

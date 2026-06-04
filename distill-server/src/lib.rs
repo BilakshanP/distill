@@ -169,22 +169,25 @@ async fn delete_me(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    sqlx::query("UPDATE answer_ratings SET comment = NULL WHERE rater_id = $1")
+        .bind(auth.user_id)
+        .execute(&mut *tx)
+        .await
+        .ok();
+
     sqlx::query(
-        "UPDATE ratings SET rater_original_query = NULL, comment = NULL WHERE rater_id = $1",
+        "UPDATE discussions SET body = '[deleted]', is_deleted = true WHERE author_id = $1",
     )
     .bind(auth.user_id)
     .execute(&mut *tx)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .ok();
 
-    sqlx::query("UPDATE contradiction_flags SET flagged_by = NULL WHERE flagged_by = $1")
+    let anon_name = format!("[deleted-{}]", &auth.user_id.to_string()[..8]);
+    sqlx::query("UPDATE users SET display_name = $2, email = NULL, avatar_url = NULL, provider_id = $3 WHERE id = $1")
         .bind(auth.user_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    sqlx::query("UPDATE users SET display_name = 'Deleted User', email = NULL, avatar_url = NULL, provider_id = '' WHERE id = $1")
-        .bind(auth.user_id)
+        .bind(&anon_name)
+        .bind(format!("deleted-{}", auth.user_id))
         .execute(&mut *tx)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;

@@ -55,10 +55,10 @@ async fn do_generate(
                  FROM fts FULL OUTER JOIN vec ON fts.id = vec.id
                ),
                answered AS (
-                 SELECT q.title AS qt, q.body AS qb, a.body AS ab,
-                        ROW_NUMBER() OVER (PARTITION BY q.id ORDER BY a.created_at DESC) AS rn
+                 SELECT q.title AS qt, q.body AS qb, w.body AS ab,
+                        ROW_NUMBER() OVER (PARTITION BY q.id ORDER BY w.updated_at DESC) AS rn
                  FROM rrf JOIN questions q ON q.id = rrf.id
-                 JOIN answers a ON a.question_id = q.id
+                 JOIN wiki_answers w ON w.question_id = q.id
                  ORDER BY rrf.score DESC
                )
                SELECT qt, qb, ab FROM answered WHERE rn = 1 LIMIT 5"#,
@@ -78,9 +78,9 @@ async fn do_generate(
                  ORDER BY ts_rank(q.tsv, websearch_to_tsquery('english', $1)) DESC LIMIT 10
                ),
                answered AS (
-                 SELECT b.title AS qt, b.body AS qb, a.body AS ab,
-                        ROW_NUMBER() OVER (PARTITION BY b.id ORDER BY a.created_at DESC) AS rn
-                 FROM bm25 b JOIN answers a ON a.question_id = b.id
+                 SELECT b.title AS qt, b.body AS qb, w.body AS ab,
+                        ROW_NUMBER() OVER (PARTITION BY b.id ORDER BY w.updated_at DESC) AS rn
+                 FROM bm25 b JOIN wiki_answers w ON w.question_id = b.id
                )
                SELECT qt, qb, ab FROM answered WHERE rn = 1 LIMIT 5"#,
         )
@@ -127,9 +127,11 @@ async fn do_generate(
         .ok_or("no text in LLM response")?
         .to_string();
 
-    let (answer_id,) = sqlx::query_as::<_, (Uuid,)>(
-        r#"INSERT INTO answers (question_id, author_type, body)
-           VALUES ($1, 'ai', $2) RETURNING id"#,
+    let (_answer_id,) = sqlx::query_as::<_, (Uuid,)>(
+        r#"INSERT INTO wiki_answers (question_id, body, author_id)
+           VALUES ($1, $2, NULL)
+           ON CONFLICT (question_id) DO UPDATE SET body = EXCLUDED.body, updated_at = now()
+           RETURNING id"#,
     )
     .bind(question_id)
     .bind(&answer_text)
@@ -137,15 +139,6 @@ async fn do_generate(
     .await?;
 
     tracing::info!("AI answer generated for question {}", question_id);
-
-    crate::routes::contradictions::detect_contradictions(
-        db,
-        chat_model,
-        answer_id,
-        &answer_text,
-        question_id,
-    )
-    .await;
 
     Ok(())
 }
