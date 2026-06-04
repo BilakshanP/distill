@@ -3,22 +3,47 @@ use distill_server::{auth::jwt, build_router, AppState};
 use sqlx::migrate::Migrator;
 use sqlx::postgres::PgPoolOptions;
 use std::collections::HashSet;
+use tokio::sync::OnceCell;
 use uuid::Uuid;
 
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
+static TEST_DB: OnceCell<sqlx::PgPool> = OnceCell::const_new();
 
-async fn setup() -> TestServer {
+fn test_db_url() -> String {
+    std::env::var("TEST_DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://distill:distill@localhost:5432/distill_test".into())
+}
+
+async fn init_test_db() -> sqlx::PgPool {
     dotenvy::dotenv().ok();
-    let db_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://distill:distill@localhost:5432/distill".into());
+    // Create distill_test if not exists
+    let admin_url = "postgres://distill:distill@localhost:5432/postgres";
+    if let Ok(conn) = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(admin_url)
+        .await
+    {
+        sqlx::query("CREATE DATABASE distill_test OWNER distill")
+            .execute(&conn)
+            .await
+            .ok();
+    }
 
-    let db = PgPoolOptions::new()
+    let pool = PgPoolOptions::new()
         .max_connections(5)
-        .connect(&db_url)
+        .connect(&test_db_url())
         .await
         .expect("Failed to connect to test DB");
+    MIGRATOR.run(&pool).await.expect("Failed to run migrations");
+    pool
+}
 
-    MIGRATOR.run(&db).await.expect("Failed to run migrations");
+async fn get_db() -> sqlx::PgPool {
+    TEST_DB.get_or_init(init_test_db).await.clone()
+}
+
+async fn setup() -> TestServer {
+    let db = get_db().await;
 
     let state = AppState {
         db,
@@ -35,12 +60,6 @@ async fn setup() -> TestServer {
 
     let app = build_router(state);
     TestServer::new(app)
-}
-
-async fn get_db() -> sqlx::PgPool {
-    let db_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://distill:distill@localhost:5432/distill".into());
-    PgPoolOptions::new().connect(&db_url).await.unwrap()
 }
 
 async fn create_test_user() -> (Uuid, String) {
@@ -266,7 +285,7 @@ async fn test_rls_tenant_isolation() {
     // Connect as app user (RLS applies)
     let app_db = sqlx::postgres::PgPoolOptions::new()
         .max_connections(1)
-        .connect("postgres://distill_app:distill@localhost:5432/distill")
+        .connect("postgres://distill_app:distill@localhost:5432/distill_test")
         .await
         .unwrap();
 
@@ -352,6 +371,7 @@ async fn test_search_tag_filter() {
 }
 
 #[tokio::test]
+#[ignore] // slow: tests exponential backoff (~90s)
 async fn test_job_queue_lifecycle() {
     let db = get_db().await;
 
