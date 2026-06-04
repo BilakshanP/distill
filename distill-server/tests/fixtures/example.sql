@@ -80,239 +80,94 @@ INSERT INTO questions (author_id, title, body, original_query, tags, status, cre
 ('a0000000-0000-0000-0000-000000000005', 'Consistent hashing for a custom distributed cache: virtual nodes needed?', 'I''m building a distributed cache layer (like memcached) and implementing consistent hashing for key distribution. With 5 nodes, load distribution is uneven. How many virtual nodes per physical node is typical and why?', 'consistent hashing virtual nodes distributed cache', '{distributed-systems,caching,algorithms}', 'open', now() - interval '8 days');
 
 -- ============================================================
--- ANSWERS (batch 1: 40 answers)
+-- WIKI ANSWERS (one per question, first 20 questions get answers)
 -- ============================================================
-INSERT INTO answers (question_id, author_id, author_type, body, created_at) VALUES
--- Q1: async lifetimes
-((SELECT id FROM questions WHERE title LIKE '%lifetimes in async%'), 'a0000000-0000-0000-0000-000000000003', 'human', 'The issue is that async functions desugar to a state machine that holds references. You need to either clone/own the data before the .await or use Arc. I hit this exact problem last week — just wrapping the reference in an Arc<String> fixed it.', now() - interval '28 days 20 hours'),
-((SELECT id FROM questions WHERE title LIKE '%lifetimes in async%'), 'a0000000-0000-0000-0000-000000000001', 'ai', E'The core issue is that async blocks capture variables by reference, but the resulting Future must be ''static to be spawned on a runtime.\n\n**Solutions:**\n1. **Own the data** — Clone or move owned values into the async block instead of borrowing.\n2. **Use Arc** — Wrap shared data in Arc<T> so multiple tasks can hold ownership.\n3. **Scope the borrow** — Ensure the reference is used and dropped before any .await point.\n4. **Use structured concurrency** — tokio::task::spawn requires ''static, but you can use tokio::join! or select! to keep borrows within the parent task.\n\nThe compiler error occurs because the generated Future struct stores all live-across-await variables, and references cannot satisfy ''static.', now() - interval '28 days 18 hours'),
-
--- Q2: Builder pattern
-((SELECT id FROM questions WHERE title LIKE '%Builder pattern in Rust%'), 'a0000000-0000-0000-0000-000000000005', 'human', 'I prefer the bon crate for derive-based builders these days. It handles Optional fields, validation, and even async builders. Way less boilerplate than hand-rolling it.', now() - interval '27 days 16 hours'),
-((SELECT id FROM questions WHERE title LIKE '%Builder pattern in Rust%'), 'a0000000-0000-0000-0000-000000000001', 'ai', E'There are three common approaches:\n\n1. **Option-based builder** — Simple, each field is Option<T>, build() validates. Good for internal APIs.\n2. **Typestate builder** — Uses generics to enforce required fields at compile time. More complex but prevents runtime errors.\n3. **Derive macro (bon, typed-builder)** — Auto-generates builder from struct definition.\n\nFor library APIs, typestate gives the best UX because users get compile errors for missing required fields. For application code, Option-based or derive macros are more pragmatic.', now() - interval '27 days 12 hours'),
-
--- Q3: Arc<Mutex> vs channels
-((SELECT id FROM questions WHERE title LIKE '%Arc<Mutex<T>> vs channels%'), 'a0000000-0000-0000-0000-000000000006', 'human', 'For a hot-path HashMap, definitely go with Arc<RwLock<T>> using tokio::sync::RwLock. Channels add overhead from serialization/deserialization of messages. RwLock gives you concurrent reads which is huge if reads >> writes.', now() - interval '26 days 22 hours'),
-((SELECT id FROM questions WHERE title LIKE '%Arc<Mutex<T>> vs channels%'), 'a0000000-0000-0000-0000-000000000007', 'human', 'Have you considered dashmap? It''s a concurrent HashMap that handles the locking internally with sharding. Way less contention than a single RwLock for high-throughput scenarios.', now() - interval '26 days 18 hours'),
-
--- Q4: Error handling
-((SELECT id FROM questions WHERE title LIKE '%thiserror and anyhow%'), 'a0000000-0000-0000-0000-000000000001', 'ai', E'The standard architecture is:\n\n1. **Library crates** — Use `thiserror` to define typed, structured errors that callers can match on.\n2. **Binary/application** — Use `anyhow` for ergonomic error propagation with context.\n3. **At the boundary** — Convert library errors into anyhow with `.context("doing X")`.\n\n**Pattern:**\n```rust\n// In your lib crate\n#[derive(thiserror::Error, Debug)]\npub enum DbError {\n    #[error(\"query failed: {0}\")]\n    Query(#[from] sqlx::Error),\n    #[error(\"not found: {entity} with id {id}\")]\n    NotFound { entity: &''static str, id: Uuid },\n}\n\n// In your binary\nasync fn handler() -> anyhow::Result<Response> {\n    let user = db::get_user(id).await.context(\"fetching user for profile\")?;\n    Ok(render(user))\n}\n```\n\nKeep error enums small and focused per module rather than one giant AppError.', now() - interval '24 days 20 hours'),
-
--- Q5: Zero-copy serde
-((SELECT id FROM questions WHERE title LIKE '%Zero-copy deserialization%'), 'a0000000-0000-0000-0000-000000000002', 'human', 'In my experience, zero-copy is worth it only when you parse the data once, access a subset of fields, and the input buffer outlives usage. For a web server where the body is read into a Vec<u8> and you immediately extract values, the complexity rarely pays off vs String.', now() - interval '21 days 14 hours'),
-((SELECT id FROM questions WHERE title LIKE '%Zero-copy deserialization%'), 'a0000000-0000-0000-0000-000000000001', 'ai', E'Zero-copy deserialization is worth it when:\n\n1. **Payload size > 1MB** — Memory savings become meaningful.\n2. **You access a small subset** — If you only read 5% of fields, avoiding allocation for the rest helps.\n3. **High throughput** — Reducing allocator pressure improves p99 latency.\n\n**Not worth it when:**\n- You need to store the deserialized struct longer than the input buffer.\n- The data needs transformation (e.g., normalizing strings).\n- Payload is small (<100KB) — allocation cost is negligible.\n\nUse `Cow<''a, str>` for fields that are usually borrowed but occasionally need mutation.', now() - interval '21 days 10 hours'),
-
--- Q6: Proc macros
-((SELECT id FROM questions WHERE title LIKE '%procedural macro%'), 'a0000000-0000-0000-0000-000000000004', 'human', 'Start with the derive_builder crate source code as a reference — it''s well-organized. Key insight: parse the DeriveInput, iterate over fields, and build token streams per field. Use quote! liberally. Also, proc-macro-error crate gives much nicer compile errors.', now() - interval '17 days 20 hours'),
-
--- Q7: Slow JOINs with jsonb
-((SELECT id FROM questions WHERE title LIKE '%slow query with multiple JOINs%'), 'a0000000-0000-0000-0000-000000000001', 'ai', E'Common reasons GIN indexes are not used:\n\n1. **Planner cost estimate** — If the jsonb condition matches >10-15% of rows, PostgreSQL prefers a seq scan. Try `SET enable_seqscan = off` to test.\n2. **Wrong operator** — GIN indexes support `@>`, `?`, `?|`, `?&` but NOT `->>'''' = ''''`. Rewrite to use containment: `WHERE col @> ''{"key": "value"}''`.\n3. **Statistics** — Run `ANALYZE` on the table. Default_statistics_target may be too low for jsonb.\n4. **JOIN order** — The planner may process the large table first due to join selectivity estimates. Use explicit CTEs or adjust join_collapse_limit.\n\nCheck `EXPLAIN (ANALYZE, BUFFERS)` output to see actual vs estimated rows.', now() - interval '27 days 18 hours'),
-((SELECT id FROM questions WHERE title LIKE '%slow query with multiple JOINs%'), 'a0000000-0000-0000-0000-000000000006', 'human', 'I had this exact issue. Turned out my jsonb query used ->>''key'' = ''val'' instead of @> containment. Once I switched to @>, the GIN index kicked in and query went from 3s to 12ms.', now() - interval '27 days 12 hours'),
-
--- Q8: Hybrid search pgvector
-((SELECT id FROM questions WHERE title LIKE '%pgvector for hybrid search%'), 'a0000000-0000-0000-0000-000000000001', 'ai', E'Both approaches work, but there are tradeoffs:\n\n**Single query (CTE approach):**\n```sql\nWITH semantic AS (\n  SELECT id, 1.0 / (60 + rank) as score\n  FROM docs ORDER BY embedding <=> $1 LIMIT 20\n), keyword AS (\n  SELECT id, 1.0 / (60 + rank) as score\n  FROM docs WHERE tsv @@ to_tsquery($2)\n  ORDER BY ts_rank(tsv, to_tsquery($2)) DESC LIMIT 20\n)\nSELECT id, SUM(score) as rrf_score\nFROM (SELECT * FROM semantic UNION ALL SELECT * FROM keyword) combined\nGROUP BY id ORDER BY rrf_score DESC LIMIT 10;\n```\n\n**Application-side merge** — More flexible, easier to tune weights, and lets you add other signals (recency, popularity). Slightly more latency from two round-trips.\n\nFor most cases, the single-query CTE approach is simpler and faster. Switch to application-side when you need more than 2 retrieval signals.', now() - interval '25 days 20 hours'),
-
--- Q9: RLS vs app filtering
-((SELECT id FROM questions WHERE title LIKE '%Row-level security vs application%'), 'a0000000-0000-0000-0000-000000000005', 'human', 'We went with RLS and don''t regret it. Yes debugging is harder (you need SET ROLE to test), but the peace of mind that a missed WHERE clause can''t leak tenant data is worth it. Just document your policies well.', now() - interval '23 days 18 hours'),
-((SELECT id FROM questions WHERE title LIKE '%Row-level security vs application%'), 'a0000000-0000-0000-0000-000000000001', 'ai', E'**RLS pros:**\n- Defense-in-depth: impossible to accidentally query cross-tenant data\n- Works even for ad-hoc queries and admin tools\n- Single enforcement point\n\n**RLS cons:**\n- Harder to debug (EXPLAIN doesn''t show RLS filters clearly)\n- Migration complexity (policies must be updated with schema)\n- Performance overhead on high-throughput queries (~5-10% in benchmarks)\n- Harder to test (need role switching in tests)\n\n**Recommendation:** Use RLS for data isolation guarantees, but also keep the tenant_id filter in your ORM as a belt-and-suspenders approach. This way you get debuggability from the app layer and security from RLS.', now() - interval '23 days 14 hours'),
-
--- Q10: Zero-downtime migrations
-((SELECT id FROM questions WHERE title LIKE '%schema migrations without downtime%'), 'a0000000-0000-0000-0000-000000000008', 'human', 'Key rules: CREATE INDEX CONCURRENTLY, add columns as nullable first then backfill, never rename in one step (add new, migrate data, drop old). Also set a statement_timeout on migration connections so you don''t accidentally hold locks.', now() - interval '20 days 16 hours'),
-((SELECT id FROM questions WHERE title LIKE '%schema migrations without downtime%'), 'a0000000-0000-0000-0000-000000000001', 'ai', E'**Safe online DDL patterns for PostgreSQL:**\n\n1. **Adding columns** — Always add as NULL without default (instant in PG11+). Backfill in batches, then add NOT NULL constraint with NOT VALID + VALIDATE separately.\n2. **Creating indexes** — Use CREATE INDEX CONCURRENTLY. It takes longer but doesn''t lock writes.\n3. **Renaming** — Never rename directly. Add new column, dual-write, backfill, switch reads, drop old.\n4. **Dropping columns** — Remove from application code first, deploy, then DROP COLUMN in a later migration.\n5. **Adding constraints** — Add as NOT VALID first (instant, no table scan), then VALIDATE CONSTRAINT separately.\n\n**With sqlx:** set `statement_timeout` in your migration runner and use separate transactions per operation.', now() - interval '20 days 12 hours'),
-
--- Q11: Partitioning
-((SELECT id FROM questions WHERE title LIKE '%Partitioning a time-series%'), 'a0000000-0000-0000-0000-000000000003', 'human', 'Range by month is the right call for time-series with range queries. Hash partitioning only helps when you query by the partition key exactly (equality), which doesn''t match your use case. We partition by week at 10M/day and it works great.', now() - interval '18 days 20 hours'),
-
--- Q12: Autovacuum tuning
-((SELECT id FROM questions WHERE title LIKE '%MVCC bloat%'), 'a0000000-0000-0000-0000-000000000001', 'ai', E'**Tuning autovacuum for high-update tables:**\n\n1. **Per-table settings** (don''t change global defaults):\n```sql\nALTER TABLE hot_table SET (\n  autovacuum_vacuum_scale_factor = 0.01,  -- trigger at 1% dead tuples (default 20%)\n  autovacuum_vacuum_cost_delay = 2,       -- less sleeping (default 20ms)\n  autovacuum_vacuum_cost_limit = 1000     -- more work per cycle (default 200)\n);\n```\n\n2. **Monitor:** Check `pg_stat_user_tables.n_dead_tup` and `last_autovacuum` timestamp.\n3. **Consider:** If updates always touch the same rows, look at HOT updates (ensure no index on updated columns).\n4. **Fillfactor:** Set fillfactor = 70-80 for HOT-eligible tables to leave room for in-page updates.', now() - interval '14 days 16 hours'),
-
--- Q13: Rate limiter
-((SELECT id FROM questions WHERE title LIKE '%rate limiter for a distributed%'), 'a0000000-0000-0000-0000-000000000007', 'human', 'Redis with a sliding window log works well. Use MULTI/EXEC to atomically check and increment. The slight inconsistency between instances (maybe 1-2% over-admission) is acceptable for most APIs. Only go full consensus if you''re doing financial limits.', now() - interval '26 days 14 hours'),
-((SELECT id FROM questions WHERE title LIKE '%rate limiter for a distributed%'), 'a0000000-0000-0000-0000-000000000001', 'ai', E'**Options ranked by complexity:**\n\n1. **Redis sliding window** — INCR + EXPIRE or sorted sets. Simple, ~10ms overhead per check. Slight over-counting under high concurrency but fine for 99% of use cases.\n2. **Redis token bucket (redis-cell)** — Redis module implementing token bucket atomically. More accurate, supports burst.\n3. **Local + gossip** — Each instance tracks locally and periodically syncs via gossip protocol. Lowest latency but eventually consistent.\n4. **Distributed consensus** — Only needed for strict financial/billing limits.\n\n**Recommended for 12 instances:** Redis sliding window with a Lua script for atomicity. Set TTL = window size. Use a key pattern like `ratelimit:{user_id}:{endpoint}:{window_start}`.', now() - interval '26 days 10 hours'),
-
--- Q14: Event sourcing
-((SELECT id FROM questions WHERE title LIKE '%Event sourcing vs CRUD%'), 'a0000000-0000-0000-0000-000000000004', 'human', 'With a team of 4, I''d say no unless audit is a hard regulatory requirement. We tried ES on a team of 6 and spent more time on projection bugs than features. A simpler approach: CRUD + an append-only audit_log table. You get the trail without the architecture tax.', now() - interval '24 days 18 hours'),
-((SELECT id FROM questions WHERE title LIKE '%Event sourcing vs CRUD%'), 'a0000000-0000-0000-0000-000000000003', 'human', 'Counterpoint: if your domain has complex state transitions (financial ledger, workflow engine), ES makes the code clearer because each transition is explicit. It depends on domain complexity more than team size.', now() - interval '24 days 14 hours'),
-
--- Q15: Notification system
-((SELECT id FROM questions WHERE title LIKE '%notification system that scales%'), 'a0000000-0000-0000-0000-000000000001', 'ai', E'**Architecture for millions of users:**\n\n1. **Ingestion** — Topic-based message queue (Kafka/SQS) with partitioning by user_id.\n2. **Preference filter** — Consumer checks user preferences and routes to channel-specific queues (push/email/SMS/in-app).\n3. **Channel workers** — Separate consumer groups per channel with appropriate batching (email: batch by time window, push: immediate).\n4. **Delivery tracking** — Write delivery status to a separate store (DynamoDB/Redis) for queryability.\n5. **Deduplication** — Idempotency key per notification to prevent duplicates on retry.\n\n**Scaling past 100k:** Partition by user_id hash, use separate queues per priority level, and implement circuit breakers per downstream provider (FCM, SES, Twilio).', now() - interval '22 days 16 hours'),
-
--- Q16: CQRS eventual consistency
-((SELECT id FROM questions WHERE title LIKE '%CQRS with separate read/write%'), 'a0000000-0000-0000-0000-000000000005', 'human', 'We solve this with "read-your-writes" at the application level. After a write, return the write result directly to that user and cache it client-side. Other users can tolerate the lag. This avoids complicating the backend.', now() - interval '19 days 20 hours'),
-
--- Q17: Webhook delivery
-((SELECT id FROM questions WHERE title LIKE '%reliable webhook delivery%'), 'a0000000-0000-0000-0000-000000000001', 'ai', E'**Reliable webhook system architecture:**\n\n1. **Event capture** — Write events to an outbox table (transactional outbox pattern) alongside business data.\n2. **Dispatcher** — Poll outbox or use CDC (Debezium) to publish to a queue.\n3. **Delivery workers** — Consume from queue, attempt HTTP delivery with timeout (5-30s).\n4. **Retry policy** — Exponential backoff: 1min, 5min, 30min, 2hr, 12hr, 24hr (6 attempts over ~38 hours).\n5. **Dead letter** — After max retries, move to DLQ. Expose via API for manual replay.\n6. **Status API** — Store delivery attempts with timestamp, status code, latency for consumer debugging.\n\n**At 10k events/sec:** Partition the queue by webhook endpoint, use connection pooling per destination, and implement circuit breakers per consumer URL.', now() - interval '15 days 18 hours'),
-
--- Q18: Circuit breaker
-((SELECT id FROM questions WHERE title LIKE '%Circuit breaker pattern%'), 'a0000000-0000-0000-0000-000000000008', 'human', 'At 500 rps, I''d use: open after 50% error rate over a 10-second window (min 20 requests to avoid small sample), half-open after 30 seconds, close after 3 consecutive successes. These are starting points — tune based on your provider''s SLA.', now() - interval '11 days 18 hours'),
-
--- Q19: Monorepo CI
-((SELECT id FROM questions WHERE title LIKE '%monorepo CI/CD pipeline%'), 'a0000000-0000-0000-0000-000000000002', 'human', 'We use dorny/paths-filter GitHub Action to detect changed paths, then map paths to crate names. Works reliably for 12 crates. Only gotcha: you need to also rebuild downstream crates when a dependency crate changes. Parse the workspace Cargo.toml for that.', now() - interval '25 days 14 hours'),
-
--- Q20: Docker caching Rust
-((SELECT id FROM questions WHERE title LIKE '%Docker layer caching%'), 'a0000000-0000-0000-0000-000000000001', 'ai', E'**Most reliable Docker caching for Rust:**\n\n1. **cargo-chef** (recommended):\n```dockerfile\nFROM rust AS planner\nRUN cargo install cargo-chef\nCOPY . .\nRUN cargo chef prepare --recipe-path recipe.json\n\nFROM rust AS builder\nRUN cargo install cargo-chef\nCOPY --from=planner /app/recipe.json .\nRUN cargo chef cook --release --recipe-path recipe.json\nCOPY . .\nRUN cargo build --release\n```\n\n2. **Key insight:** The recipe.json only changes when Cargo.toml/Cargo.lock changes, so the `cook` layer is cached across code changes.\n\n3. **CI-specific:** Use GitHub Actions cache or BuildKit cache mounts for the registry and target directory.\n\nThis reliably brings incremental builds from 15min to 2-3min.', now() - interval '23 days 18 hours'),
-
--- Q21: Terraform vs Pulumi
-((SELECT id FROM questions WHERE title LIKE '%Terraform vs Pulumi%'), 'a0000000-0000-0000-0000-000000000004', 'human', 'For 3 devs, Terraform is simpler to onboard. The ecosystem (modules, docs, Stack Overflow answers) is massive. Pulumi is nicer to write but you''ll spend time debugging SDK issues that have fewer community answers. Go Terraform unless you have complex logic that HCL can''t express.', now() - interval '21 days 16 hours'),
-
--- Q22: Blue-green ECS
-((SELECT id FROM questions WHERE title LIKE '%blue-green deployments on ECS%'), 'a0000000-0000-0000-0000-000000000008', 'human', 'You can do it with just ALB + two target groups. Deploy new task def to the green TG, run health checks, then swap the listener rule. Rollback = swap back. CodeDeploy adds hooks (Lambda validators) but isn''t strictly necessary for basic blue-green.', now() - interval '18 days 16 hours'),
-
--- Q23: Secrets management
-((SELECT id FROM questions WHERE title LIKE '%Secrets management: Vault%'), 'a0000000-0000-0000-0000-000000000006', 'human', 'For a startup with 5 services: AWS Secrets Manager + a simple wrapper that caches in memory. Yes it costs per secret but you get rotation, audit trail, and IAM-based access without running anything yourself. Vault is for when you hit 50+ services.', now() - interval '16 days 14 hours'),
-
--- Q24: Observability
-((SELECT id FROM questions WHERE title LIKE '%Observability stack%'), 'a0000000-0000-0000-0000-000000000001', 'ai', E'**Cost comparison (rough, 50 services, moderate volume):**\n\n- **Datadog:** $5k-15k/month depending on hosts, custom metrics, log volume\n- **Self-hosted Grafana stack:** $500-2000/month infra + 0.5 FTE maintenance\n\n**Break-even point:** ~$8k/month Datadog bill and a team member who enjoys infra. Below that, Datadog''s time savings win.\n\n**Middle ground:** Use Grafana Cloud (managed). Cheaper than Datadog, less maintenance than self-hosted. Free tier covers small setups. Pay-as-you-go scales linearly.\n\n**Regardless of choice:** Instrument with OpenTelemetry SDK so you can switch backends without code changes.', now() - interval '13 days 18 hours'),
-
--- Q25: JWT refresh rotation
-((SELECT id FROM questions WHERE title LIKE '%JWT refresh token rotation%'), 'a0000000-0000-0000-0000-000000000003', 'human', 'Yes, rotate refresh tokens on every use (one-time use tokens). Store a token family ID — if a reused token is detected, invalidate the entire family. This catches token theft. For concurrent requests, use a short grace period (5-10s) where the old token still works.', now() - interval '26 days 18 hours'),
-
--- Q26: SSE vs WebSockets
-((SELECT id FROM questions WHERE title LIKE '%Server-Sent Events vs WebSocket%'), 'a0000000-0000-0000-0000-000000000001', 'ai', E'**SSE is sufficient when:**\n- Data flow is unidirectional (server → client)\n- You don''t need binary data\n- Connection count is manageable (<10k concurrent per server)\n\n**SSE advantages:**\n- Built-in reconnection with Last-Event-ID\n- Works through most proxies and CDNs\n- Simpler server implementation (just HTTP)\n- No special protocol negotiation\n\n**WebSocket advantages:**\n- Bidirectional (but you said server→client only)\n- Binary frame support\n- Lower per-message overhead for high-frequency updates\n\n**Connection limits:** HTTP/2 multiplexes SSE streams over one TCP connection, solving the 6-connection-per-domain browser limit. For notifications (low frequency, server→client), SSE is the right choice.', now() - interval '22 days 14 hours'),
-
--- Q27: Pagination
-((SELECT id FROM questions WHERE title LIKE '%cursor-based vs offset%'), 'a0000000-0000-0000-0000-000000000007', 'human', 'Stripe uses cursor pagination for list endpoints and it works great. The trick is: encode the cursor as an opaque string (base64 of the last item''s sort key). Clients don''t need "jump to page N" if you give them good filtering instead.', now() - interval '20 days 14 hours'),
-
--- Q28: File uploads
-((SELECT id FROM questions WHERE title LIKE '%file uploads with presigned%'), 'a0000000-0000-0000-0000-000000000002', 'human', 'For resumable uploads, use S3 multipart upload with presigned URLs for each part. Client uploads 5MB chunks, reports progress per chunk. If connection drops, resume from last completed part. tus.io protocol is also an option if you want a standard.', now() - interval '17 days 14 hours'),
-
--- Q29: CORS
-((SELECT id FROM questions WHERE title LIKE '%CORS configuration for a multi-subdomain%'), 'a0000000-0000-0000-0000-000000000001', 'ai', E'**Safe dynamic CORS pattern:**\n\n1. **Maintain an allowlist** of valid origins in config (DB or env).\n2. **On each request**, check the Origin header against your allowlist.\n3. **If matched**, reflect that specific origin in Access-Control-Allow-Origin (never use *).\n4. **Add Vary: Origin** header to prevent CDN cache poisoning.\n\n**For white-label domains:**\n- Store allowed origins per tenant in DB\n- Cache the allowlist in memory with short TTL (60s)\n- Validate against the cached list on every preflight\n\n**Never:** Use regex matching on origins without anchoring, or allow null origins.', now() - interval '13 days 14 hours'),
-
--- Q30: Axum extractors
-((SELECT id FROM questions WHERE title LIKE '%Axum extractors for clean%'), 'a0000000-0000-0000-0000-000000000004', 'human', 'I use a custom extractor that wraps validator crate. Implement FromRequest, call validate() on the inner type, and return a structured ApiError on failure. Keeps handlers clean — they just receive a Validated<CreateUserRequest> and it''s guaranteed valid.', now() - interval '9 days 18 hours');
+INSERT INTO wiki_answers (question_id, body, author_id, last_editor_id, created_at, updated_at)
+SELECT q.id,
+  'This is the community-maintained answer for: ' || q.title || E'\n\n' ||
+  'Key points:' || E'\n' ||
+  '- The approach depends on your specific constraints' || E'\n' ||
+  '- Consider trade-offs between simplicity and performance' || E'\n' ||
+  '- See the discussion below for detailed perspectives',
+  ('a0000000-0000-0000-0000-00000000000' || (1 + (row_number() OVER ()) % 8))::uuid,
+  ('a0000000-0000-0000-0000-00000000000' || (1 + (row_number() OVER () + 3) % 8))::uuid,
+  q.created_at + interval '1 day',
+  q.created_at + interval '3 days'
+FROM questions q
+ORDER BY q.created_at
+LIMIT 20;
 
 -- ============================================================
--- ANSWERS (batch 2: 40 answers)
+-- DISCUSSIONS (threaded comments, ~80 total)
 -- ============================================================
-INSERT INTO answers (question_id, author_id, author_type, body, created_at) VALUES
--- Q31: RAG evaluation
-((SELECT id FROM questions WHERE title LIKE '%RAG retrieval quality%'), 'a0000000-0000-0000-0000-000000000001', 'ai', E'**Bootstrapping RAG evaluation without labels:**\n\n1. **Synthetic test generation** — Use an LLM to generate question-answer pairs from your source documents. These become your ground truth.\n2. **LLM-as-judge** — Have GPT-4 rate retrieval relevance on a 1-5 scale. Correlates ~0.85 with human judgments.\n3. **Key metrics:**\n   - Retrieval: Recall@K, MRR, NDCG\n   - Generation: Faithfulness (is answer grounded in context?), Answer relevance\n4. **Tools:** RAGAS framework automates these metrics with minimal setup.\n\n**Start with 50-100 synthetic QA pairs, manually validate 20%, then scale up.**', now() - interval '25 days 16 hours'),
-((SELECT id FROM questions WHERE title LIKE '%RAG retrieval quality%'), 'a0000000-0000-0000-0000-000000000005', 'human', 'We use RAGAS with synthetic data from our docs. It''s not perfect but it caught a regression when we changed our chunking strategy. Also, logging production queries and periodically sampling them for manual eval is underrated.', now() - interval '25 days 10 hours'),
-
--- Q32: Chunking strategies
-((SELECT id FROM questions WHERE title LIKE '%Chunking strategies for long%'), 'a0000000-0000-0000-0000-000000000001', 'ai', E'**Practical chunking guidelines for Q&A retrieval:**\n\n- **Chunk size:** 256-512 tokens is the sweet spot for most embedding models. Larger chunks (1024) retain more context but dilute relevance signals.\n- **Overlap:** 10-20% overlap (50-100 tokens) prevents losing context at boundaries.\n- **Semantic chunking:** Split on headers/sections first, then apply size limits within sections.\n- **Metadata:** Always attach source document title, section heading, and position to each chunk.\n\n**For technical docs specifically:** Use markdown heading structure as primary split points, with a max chunk size fallback. This preserves the logical unit of information.', now() - interval '22 days 14 hours'),
-
--- Q33: Hallucination detection
-((SELECT id FROM questions WHERE title LIKE '%detect and handle LLM hallucinations%'), 'a0000000-0000-0000-0000-000000000006', 'human', 'We use a two-pass approach: generate the answer, then run a second LLM call asking "which claims in this answer are NOT supported by the following context?" with the source chunks. It catches ~70% of hallucinations. Not perfect but way better than nothing.', now() - interval '19 days 16 hours'),
-((SELECT id FROM questions WHERE title LIKE '%detect and handle LLM hallucinations%'), 'a0000000-0000-0000-0000-000000000001', 'ai', E'**Production hallucination detection techniques:**\n\n1. **NLI-based verification** — Run each claim through a Natural Language Inference model against source context. Flag claims with low entailment scores.\n2. **Self-consistency** — Generate multiple answers at temperature > 0. Claims that appear in <50% of generations are likely hallucinated.\n3. **Citation forcing** — Require the model to cite specific chunks for each claim. Verify citations exist.\n4. **Confidence calibration** — Track log-probabilities; low-confidence tokens correlate with fabrication.\n\n**In production:** Combine citation forcing (cheap) with NLI verification (more accurate). Flag answers below a threshold for human review rather than blocking them entirely.', now() - interval '19 days 12 hours'),
-
--- Q34: Fine-tuning vs RAG
-((SELECT id FROM questions WHERE title LIKE '%Fine-tuning vs few-shot%'), 'a0000000-0000-0000-0000-000000000008', 'human', 'Quick decision tree: Is the knowledge factual and changes often? → RAG. Is it about style/format/behavior? → Fine-tuning. Is it a few specific tasks? → Few-shot. Most teams should start with RAG because it''s the fastest to iterate on and doesn''t require training infrastructure.', now() - interval '16 days 14 hours'),
-
--- Q35: Streaming backpressure
-((SELECT id FROM questions WHERE title LIKE '%streaming LLM responses with backpressure%'), 'a0000000-0000-0000-0000-000000000002', 'human', 'Use a bounded channel between the LLM client and the SSE writer. If the channel fills up (client is slow), the LLM reader blocks. With tokio::sync::mpsc(64) we handle 1000 concurrent streams on 2GB RAM without issues.', now() - interval '12 days 14 hours'),
-((SELECT id FROM questions WHERE title LIKE '%streaming LLM responses with backpressure%'), 'a0000000-0000-0000-0000-000000000001', 'ai', E'**Implementing backpressure for LLM streaming:**\n\n1. **Bounded channel** — Use `tokio::sync::mpsc::channel(buffer_size)` between LLM consumer and HTTP writer. When buffer is full, the producer awaits.\n2. **Timeout** — If the client doesn''t consume within N seconds, drop the connection and cancel the LLM request.\n3. **Token batching** — Instead of sending per-token, batch 3-5 tokens before flushing. Reduces syscall overhead.\n4. **Connection limits** — Cap concurrent streams per user and globally. Return 429 when at capacity.\n\n**Memory budget:** `max_concurrent_streams × buffer_size × avg_token_bytes`. With 1000 streams, 64-token buffer, ~4 bytes/token = ~256KB total. Very manageable.', now() - interval '12 days 10 hours'),
-
--- Q36: Embedding models
-((SELECT id FROM questions WHERE title LIKE '%Embedding model selection%'), 'a0000000-0000-0000-0000-000000000007', 'human', 'We switched from ada-002 to E5-large-v2 and saw equivalent retrieval quality on our benchmarks (NDCG@10 within 2%). Self-hosted on a single T4 GPU, handles 500 req/s. Cost went from $2k/month to $200/month in GPU costs.', now() - interval '8 days 18 hours'),
-
--- Q37: RBAC
-((SELECT id FROM questions WHERE title LIKE '%RBAC with resource-level%'), 'a0000000-0000-0000-0000-000000000001', 'ai', E'**Practical RBAC with resource-level permissions:**\n\n1. **Model:** Three tables — roles, permissions, role_assignments.\n   - permissions: (role_id, resource_type, resource_id [nullable], action)\n   - NULL resource_id = permission on ALL resources of that type\n2. **Check pattern:** `can(user, action, resource_type, resource_id)` → query permissions table.\n3. **Middleware approach:** Single authorization middleware that extracts resource_type and resource_id from the route, then checks permission.\n4. **Caching:** Cache user permissions in Redis with invalidation on role change. TTL 5 minutes.\n\n**Avoid:** Per-endpoint permission checks scattered in handlers. Use a centralized policy engine (even a simple one) that all endpoints call.', now() - interval '24 days 14 hours'),
-
--- Q38: SSRF prevention
-((SELECT id FROM questions WHERE title LIKE '%Preventing SSRF%'), 'a0000000-0000-0000-0000-000000000005', 'human', 'The most robust defense is: resolve DNS yourself, check the resolved IP against a blocklist of private ranges (10.x, 172.16-31.x, 169.254.x, 127.x, etc.), THEN connect to that specific IP with the Host header. This prevents DNS rebinding because you pin the IP.', now() - interval '20 days 14 hours'),
-
--- Q39: CSP
-((SELECT id FROM questions WHERE title LIKE '%Content Security Policy%'), 'a0000000-0000-0000-0000-000000000003', 'human', 'Start with a strict CSP that breaks things, then loosen strategically. For user images: use img-src * (images can''t execute JS). For user HTML: serve it in a sandboxed iframe on a different origin. Never allow inline scripts from user content — that defeats CSP entirely.', now() - interval '15 days 14 hours'),
-
--- Q40: API key rotation
-((SELECT id FROM questions WHERE title LIKE '%rotate compromised API keys%'), 'a0000000-0000-0000-0000-000000000001', 'ai', E'**Graceful key rotation playbook:**\n\n1. **Immediate:** Generate new key, add to system as secondary (both old and new work).\n2. **Notify:** Email/webhook all consumers that old key is deprecated. Include new key and deadline.\n3. **Overlap period:** Run both keys for 7-14 days. Log usage of old key to track migration.\n4. **Warning phase:** Return a deprecation header/warning with old key responses.\n5. **Revoke:** After deadline, revoke old key. Return 401 with a message pointing to docs.\n\n**For the leaked key specifically:** If actively exploited, shorten overlap to 24-48 hours and accept some client breakage. Audit logs for unauthorized usage during exposure window.', now() - interval '10 days 14 hours'),
-
--- Q41: SQL injection in dynamic queries
-((SELECT id FROM questions WHERE title LIKE '%SQL injection prevention in dynamic%'), 'a0000000-0000-0000-0000-000000000008', 'human', 'For dynamic column names: whitelist approach. Map user input to a fixed set of allowed column names via an enum or HashMap. Never interpolate user strings into column positions directly. For sort order, only allow "ASC" or "DESC" literals.', now() - interval '6 days 14 hours'),
-((SELECT id FROM questions WHERE title LIKE '%SQL injection prevention in dynamic%'), 'a0000000-0000-0000-0000-000000000001', 'ai', E'**Safe dynamic query construction:**\n\n1. **Values** — Always parameterized ($1, $2, etc.). No exceptions.\n2. **Column names** — Allowlist using an enum that maps to known columns. Reject anything not in the list.\n3. **Sort direction** — Parse into an enum: `enum SortDir { Asc, Desc }`. Format the enum, not user input.\n4. **Table names** — Same as columns: allowlist via enum.\n5. **Dynamic filters** — Build a vec of conditions and params, join with AND. Each condition uses a parameterized value.\n\n**In Rust with sqlx:**\nUse `query_builder` or build the SQL string with format! for structural parts (from allowlisted enums) and bind() for all values.', now() - interval '6 days 10 hours'),
-
--- Q42: Raft consensus
-((SELECT id FROM questions WHERE title LIKE '%Raft consensus handle network%'), 'a0000000-0000-0000-0000-000000000006', 'human', 'When the partition heals, the leader with the higher term wins. The other "leader" will see AppendEntries with a higher term, step down to follower, and truncate its uncommitted log entries to match. Committed entries (replicated to majority) are never lost — that''s the key invariant.', now() - interval '23 days 14 hours'),
-
--- Q43: Idempotency keys
-((SELECT id FROM questions WHERE title LIKE '%Idempotency keys: client-generated%'), 'a0000000-0000-0000-0000-000000000001', 'ai', E'**Client-generated idempotency keys are standard practice.** Here''s why:\n\n1. **Client control** — Only the client knows if a retry is for the same logical operation.\n2. **Server-derived** keys (content hash) break when the same content is intentionally submitted twice.\n3. **Implementation:** Store (idempotency_key, response, expires_at) in DB/Redis. On duplicate key, return stored response.\n\n**Safeguards against misuse:**\n- Scope keys to the authenticated user (key is unique per user, not globally)\n- Set a TTL (24-48 hours) — keys aren''t permanent\n- Validate key format (must be UUID or similar)\n- Return 409 Conflict if the key exists but request body differs (prevents key reuse for different operations)', now() - interval '18 days 14 hours'),
-
--- Q44: Saga vs 2PC
-((SELECT id FROM questions WHERE title LIKE '%Saga pattern vs 2PC%'), 'a0000000-0000-0000-0000-000000000004', 'human', 'In microservices, 2PC is basically unusable because it requires all participants to be available simultaneously and a single coordinator failure blocks everything. Sagas with compensating transactions are the way to go. Use orchestration (central saga coordinator) not choreography (events) unless your team is very experienced.', now() - interval '14 days 14 hours'),
-((SELECT id FROM questions WHERE title LIKE '%Saga pattern vs 2PC%'), 'a0000000-0000-0000-0000-000000000005', 'human', 'Agreed on sagas, but one caveat: compensating transactions are hard to get right. "Undo payment" isn''t always possible (refund takes days). Design your saga steps to be reversible from the start, or use reservation patterns (reserve funds → confirm/cancel).', now() - interval '14 days 10 hours'),
-
--- Q45: Consistent hashing
-((SELECT id FROM questions WHERE title LIKE '%Consistent hashing%'), 'a0000000-0000-0000-0000-000000000001', 'ai', E'**Virtual nodes in consistent hashing:**\n\n- **Why needed:** With 5 physical nodes and one hash per node, load distribution can be 60/10/10/10/10 due to random placement on the ring.\n- **How many:** 100-200 virtual nodes per physical node is typical. This gives <10% load variance.\n- **Trade-off:** More vnodes = better distribution but larger routing table and slower lookups.\n- **In practice:** Use 150 vnodes/node for caches, 256 for databases (where imbalance is costlier).\n\n**Alternative:** Jump consistent hash requires no virtual nodes and gives perfect distribution, but doesn''t support weighted nodes or easy removal.', now() - interval '7 days 14 hours'),
-((SELECT id FROM questions WHERE title LIKE '%Consistent hashing%'), 'a0000000-0000-0000-0000-000000000005', 'human', 'We use 256 virtual nodes and it gives us within 5% load variance across 8 nodes. Less than 100 and we saw 20%+ imbalance. The routing table overhead is negligible — it''s just a sorted array of hashes.', now() - interval '7 days 10 hours');
-
--- ============================================================
--- RATINGS (60 ratings across answers)
--- ============================================================
-INSERT INTO ratings (answer_id, rater_id, score, scale_type, comment, created_at)
-SELECT a.id,
-  ('a0000000-0000-0000-0000-00000000000' || (2 + (row_number() OVER ()) % 7))::uuid,
-  1 + (abs(hashtext(a.id::text || row_number() OVER ()::text)) % 5),
-  'stars_5',
-  (ARRAY['Very helpful answer', 'Good explanation', 'Could be more detailed', 'Exactly what I needed', 'Solid advice', 'Helped me solve my issue', 'Clear and concise', 'Great real-world example', 'This should be the accepted answer', 'Saved me hours of debugging'])[1 + abs(hashtext(a.id::text)) % 10],
-  a.created_at + interval '1 day' + (random() * interval '5 days')
-FROM answers a
-ORDER BY a.created_at
-LIMIT 60;
-
--- ============================================================
--- COMMENTS on questions (15)
--- ============================================================
-INSERT INTO comments (question_id, author_id, body, created_at)
+-- Top-level discussions (40)
+INSERT INTO discussions (question_id, author_id, body, depth, created_at)
 SELECT q.id,
   ('a0000000-0000-0000-0000-00000000000' || (1 + (row_number() OVER ()) % 8))::uuid,
   (ARRAY[
-    'Can you share the exact error message?',
-    'What version are you running?',
-    'Have you tried the latest release?',
-    'This is a common issue, see the docs.',
-    'Interesting question, following.',
-    'We hit this exact problem last week.',
-    'What''s your deployment environment?',
-    'Can you share a minimal reproduction?',
-    'This might be related to a known bug.',
-    'Are you using the async or sync variant?',
-    'What OS and architecture?',
-    'Have you checked the issue tracker?',
-    'Duplicate of #34 perhaps?',
-    'Great question, upvoted.',
-    'The answer depends on your scale requirements.'
-  ])[1 + (row_number() OVER ()) % 15],
-  q.created_at + interval '2 hours' + (random() * interval '3 days')
+    'I ran into this exact issue last week. The key insight is to think about ownership first, then lifetimes follow naturally.',
+    'Great question. In my experience the pragmatic choice depends heavily on team size and deployment constraints.',
+    'We benchmarked both approaches and found the simpler solution was only 5% slower — not worth the complexity.',
+    'The docs are misleading here. What actually works in production is quite different from the textbook answer.',
+    'This is one of those "it depends" situations. Let me share what worked for our 10k RPS service.',
+    'I would strongly recommend starting with the simpler approach and only optimizing if you hit measurable bottlenecks.',
+    'We tried three different approaches over 6 months. Here is what we learned the hard way.',
+    'The official recommendation changed in the latest version. Make sure you are reading current docs.',
+    'Hot take: most teams over-engineer this. A simple solution with good monitoring beats a complex one without.',
+    'Adding context: we have a similar setup in production handling 50M requests/day and this pattern holds up.'
+  ])[1 + (row_number() OVER ()) % 10],
+  0,
+  q.created_at + interval '2 hours' + (interval '1 hour' * (row_number() OVER () % 24))
 FROM questions q
 ORDER BY q.created_at
-LIMIT 15;
+LIMIT 40;
+
+-- Replies to discussions (40)
+INSERT INTO discussions (question_id, parent_id, author_id, body, depth, created_at)
+SELECT d.question_id,
+  d.id,
+  ('a0000000-0000-0000-0000-00000000000' || (1 + (row_number() OVER () + 4) % 8))::uuid,
+  (ARRAY[
+    'Totally agree. We had the same experience and switched to this approach 6 months ago.',
+    'Could you elaborate on the performance numbers? What was your test setup?',
+    'This contradicts what I have seen. In our case the opposite was true due to network latency.',
+    'Thanks for sharing. One thing to add: make sure you handle the edge case of empty inputs.',
+    'We use a slightly modified version of this that also accounts for concurrent access patterns.',
+    'Good point but this only applies if you are running on a single node. Distributed setups differ.',
+    'I tried this and it works. One gotcha: you need to set the timeout higher than the default.',
+    'Interesting perspective. Do you have a link to the benchmarks you mentioned?',
+    'This is the correct answer IMO. I wish the documentation was this clear.',
+    'Disagree slightly — in high-throughput scenarios the overhead becomes noticeable.'
+  ])[1 + (row_number() OVER ()) % 10],
+  1,
+  d.created_at + interval '30 minutes' + (interval '1 hour' * (row_number() OVER () % 12))
+FROM discussions d
+WHERE d.depth = 0
+ORDER BY d.created_at
+LIMIT 40;
 
 -- ============================================================
--- COMMENTS on answers (25)
+-- DISCUSSION VOTES (120 votes spread across discussions)
 -- ============================================================
-INSERT INTO comments (answer_id, author_id, body, created_at)
-SELECT a.id,
+INSERT INTO discussion_votes (discussion_id, user_id, direction, created_at)
+SELECT d.id,
   ('a0000000-0000-0000-0000-00000000000' || (1 + (row_number() OVER ()) % 8))::uuid,
-  (ARRAY[
-    'Great explanation, thanks!',
-    'Could you expand on this point?',
-    'I tried this and it works perfectly.',
-    'Not sure this is correct for all cases.',
-    'This saved my day, thank you!',
-    'What about edge cases with large datasets?',
-    'Confirmed working on latest stable.',
-    'Nice approach, but consider the memory overhead.',
-    'This contradicts what the docs say.',
-    'Would love to see benchmarks.',
-    'Exactly what I was looking for.',
-    'The async version is trickier though.',
-    'Clean solution.',
-    'Does this work in production?',
-    'Solid answer, bookmarked.',
-    'One caveat: this breaks on Windows.',
-    'How does this compare to the alternative?',
-    'Adding a code example would help.',
-    'We use exactly this pattern.',
-    'The performance implications are worth noting.',
-    'This is the correct answer.',
-    'Might want to add error handling.',
-    'Simple and effective.',
-    'Love the pragmatic approach.',
-    'Worth mentioning the tradeoffs.'
-  ])[1 + (row_number() OVER ()) % 25],
-  a.created_at + interval '4 hours' + (random() * interval '5 days')
-FROM answers a
+  CASE WHEN random() > 0.2 THEN 1 ELSE -1 END,
+  d.created_at + interval '1 hour' * (1 + (row_number() OVER () % 48))
+FROM discussions d
 ORDER BY random()
-LIMIT 25;
+LIMIT 120;
+
+-- ============================================================
+-- ANSWER RATINGS (30 ratings on wiki answers)
+-- ============================================================
+INSERT INTO answer_ratings (wiki_answer_id, rater_id, score, scale_type, comment, created_at)
+SELECT w.id,
+  ('a0000000-0000-0000-0000-00000000000' || (2 + (row_number() OVER ()) % 7))::uuid,
+  1 + abs(hashtext(w.id::text || (row_number() OVER ())::text)) % 5,
+  'stars_5',
+  (ARRAY['Very helpful', 'Good explanation', 'Could be more detailed', 'Exactly what I needed', 'Clear and concise'])[1 + abs(hashtext(w.id::text)) % 5],
+  w.created_at + interval '2 days' + (interval '1 day' * (row_number() OVER () % 10))
+FROM wiki_answers w
+ORDER BY w.created_at
+LIMIT 30;
