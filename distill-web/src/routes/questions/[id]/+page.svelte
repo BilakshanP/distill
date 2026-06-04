@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
-	import { api, type Question, type Answer, isLoggedIn, getUserId, setUserId } from '$lib/api';
+	import { api, type Question, type Answer, type Discussion, isLoggedIn } from '$lib/api';
 	import { onMount } from 'svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
@@ -10,76 +10,88 @@
 	import Markdown from '$lib/components/Markdown.svelte';
 
 	let question = $state<Question | null>(null);
-	let answers = $state<Answer[]>([]);
-	let newAnswer = $state('');
-	let submitting = $state(false);
+	let wikiAnswer = $state<Answer | null>(null);
+	let discussions = $state<Discussion[]>([]);
+	let newComment = $state('');
+	let replyTo = $state<string | null>(null);
+	let replyBody = $state('');
+	let editing = $state(false);
+	let editBody = $state('');
 	let error = $state('');
-	let myRatings = $state<Record<string, number>>({});
 
 	const id = $derived($page.params.id!);
 
 	onMount(async () => {
 		if (!id) return;
 		try {
-			const [q, a] = await Promise.all([api.getQuestion(id), api.getAnswers(id)]);
-			question = q;
-			answers = a;
-
-			// Fetch user info and existing ratings
-			if (isLoggedIn()) {
-				try {
-					const me = await api.getMe();
-					setUserId(me.id);
-				} catch {}
-
-				const userId = getUserId();
-				if (userId) {
-					for (const ans of a) {
-						try {
-							const r = await api.getRatings(ans.id);
-							const mine = r.data.find(x => x.rater_id === userId);
-							if (mine) myRatings[ans.id] = mine.score;
-						} catch {}
-					}
-					myRatings = { ...myRatings };
-				}
-			}
+			question = await api.getQuestion(id);
+			try { wikiAnswer = await api.getWikiAnswer(id); } catch {}
+			discussions = await api.listDiscussions(id);
 		} catch (e: any) {
 			error = e.message;
 		}
 	});
 
-	async function submitAnswer() {
-		if (!newAnswer.trim()) return;
-		submitting = true;
+	async function submitComment() {
+		if (!newComment.trim()) return;
 		try {
-			const a = await api.createAnswer(id, newAnswer);
-			answers = [...answers, a];
-			newAnswer = '';
-		} catch (e: any) {
-			error = e.message;
-		} finally {
-			submitting = false;
-		}
+			const d = await api.createDiscussion(id, newComment);
+			discussions = [...discussions, d];
+			newComment = '';
+		} catch (e: any) { error = e.message; }
 	}
 
-	async function rate(answerId: string, score: number) {
+	async function submitReply() {
+		if (!replyBody.trim() || !replyTo) return;
 		try {
-			if (myRatings[answerId] === score) {
-				// Same score = unrate
-				await api.deleteRating(answerId);
-				delete myRatings[answerId];
-				myRatings = { ...myRatings };
-			} else {
-				// New or different score = upsert
-				await api.rateAnswer(answerId, score);
-				myRatings[answerId] = score;
-				myRatings = { ...myRatings };
-			}
-		} catch (e: any) {
-			error = e.message;
-		}
+			const d = await api.createDiscussion(id, replyBody, replyTo);
+			discussions = [...discussions, d];
+			replyBody = '';
+			replyTo = null;
+		} catch (e: any) { error = e.message; }
 	}
+
+	async function vote(discussionId: string, direction: number) {
+		try {
+			const result = await api.voteDiscussion(discussionId, direction);
+			discussions = discussions.map(d =>
+				d.id === discussionId ? { ...d, score: result.score, user_vote: result.user_vote } : d
+			);
+		} catch (e: any) { error = e.message; }
+	}
+
+	async function saveEdit() {
+		if (!editBody.trim()) return;
+		try {
+			wikiAnswer = await api.editWikiAnswer(id, editBody, 'Edited via web');
+			editing = false;
+		} catch (e: any) { error = e.message; }
+	}
+
+	function startEdit() {
+		editBody = wikiAnswer?.body || '';
+		editing = true;
+	}
+
+	// Build tree from flat list
+	function buildTree(items: Discussion[]): (Discussion & { children: Discussion[] })[] {
+		const map = new Map<string, Discussion & { children: Discussion[] }>();
+		const roots: (Discussion & { children: Discussion[] })[] = [];
+		for (const item of items) {
+			map.set(item.id, { ...item, children: [] });
+		}
+		for (const item of items) {
+			const node = map.get(item.id)!;
+			if (item.parent_id && map.has(item.parent_id)) {
+				map.get(item.parent_id)!.children.push(node);
+			} else {
+				roots.push(node);
+			}
+		}
+		return roots;
+	}
+
+	const tree = $derived(buildTree(discussions));
 </script>
 
 <svelte:head><title>{question?.title || 'Question'} - Distill</title></svelte:head>
@@ -99,66 +111,100 @@
 				{/each}
 			</div>
 		{/if}
-		<p class="text-xs text-muted-foreground">{new Date(question.created_at).toLocaleDateString()}</p>
 	</article>
 
 	<Separator class="my-8" />
 
+	<!-- Wiki Answer -->
 	<section class="space-y-4">
-		<h2 class="text-lg font-semibold">{answers.length} {answers.length === 1 ? 'Answer' : 'Answers'}</h2>
+		<div class="flex items-center justify-between">
+			<h2 class="text-lg font-semibold">Answer</h2>
+			{#if isLoggedIn() && !editing}
+				<Button variant="outline" size="sm" onclick={startEdit}>
+					{wikiAnswer ? 'Edit' : 'Write Answer'}
+				</Button>
+			{/if}
+		</div>
 
-		{#each answers as a}
+		{#if editing}
+			<div class="space-y-3">
+				<Textarea bind:value={editBody} rows={8} placeholder="Write or edit the answer (markdown supported)..." />
+				<div class="flex gap-2">
+					<Button onclick={saveEdit} disabled={!editBody.trim()}>Save</Button>
+					<Button variant="outline" onclick={() => editing = false}>Cancel</Button>
+				</div>
+			</div>
+		{:else if wikiAnswer}
 			<Card.Root>
-				<Card.Header>
-					<div class="flex items-center gap-2 text-xs text-muted-foreground">
-						<Badge variant={a.author_type === 'ai' ? 'default' : 'outline'}>{a.author_type}</Badge>
-						{#if a.is_stale}<Badge variant="destructive">stale</Badge>{/if}
-						{#if a.rating_avg}
-							<span>★ {a.rating_avg.toFixed(1)} ({a.rating_count})</span>
-						{:else if a.rating_positive_pct !== null}
-							<span>↑{Math.round(a.rating_positive_pct)}% ({a.rating_count})</span>
-						{/if}
-						{#if a.comment_count > 0}
-							<span>{a.comment_count} comments</span>
-						{/if}
-					</div>
-				</Card.Header>
-				<Card.Content>
-					<Markdown content={a.body} />
+				<Card.Content class="pt-6">
+					<Markdown content={wikiAnswer.body} />
 				</Card.Content>
-				{#if isLoggedIn()}
-					<Card.Footer>
-						<div class="flex gap-1 items-center">
-							<span class="text-xs text-muted-foreground mr-1">Rate:</span>
-							{#each [1, 2, 3, 4, 5] as score}
-								<Button
-									variant={myRatings[a.id] === score ? 'default' : 'outline'}
-									size="sm"
-									onclick={() => rate(a.id, score)}
-								>
-									{score}
-								</Button>
-							{/each}
-							{#if myRatings[a.id]}
-								<span class="text-xs text-muted-foreground ml-2">Your rating: {myRatings[a.id]}/5</span>
-							{/if}
-						</div>
-					</Card.Footer>
-				{/if}
+				<Card.Footer class="text-xs text-muted-foreground">
+					Last updated: {new Date(wikiAnswer.updated_at).toLocaleDateString()}
+				</Card.Footer>
 			</Card.Root>
-		{/each}
+		{:else}
+			<p class="text-muted-foreground text-sm">No answer yet. Be the first to contribute!</p>
+		{/if}
 	</section>
 
-	{#if isLoggedIn()}
-		<Separator class="my-8" />
-		<div class="space-y-3">
-			<h3 class="text-sm font-medium">Your Answer</h3>
-			<Textarea bind:value={newAnswer} rows={4} placeholder="Write your answer..." />
-			<Button onclick={submitAnswer} disabled={submitting || !newAnswer.trim()}>
-				{submitting ? 'Submitting...' : 'Submit Answer'}
-			</Button>
-		</div>
-	{/if}
+	<Separator class="my-8" />
+
+	<!-- Threaded Discussion -->
+	<section class="space-y-4">
+		<h2 class="text-lg font-semibold">Discussion ({discussions.length})</h2>
+
+		{#snippet threadNode(node: any)}
+			<div class="border-l-2 border-border pl-4 py-2" style="margin-left: {node.depth * 16}px">
+				<div class="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+					<div class="flex items-center gap-1">
+						{#if isLoggedIn()}
+							<button
+								class="hover:text-foreground {node.user_vote === 1 ? 'text-green-500' : ''}"
+								onclick={() => vote(node.id, 1)}>▲</button>
+						{/if}
+						<span class="font-mono font-medium {node.score > 0 ? 'text-green-600' : node.score < 0 ? 'text-red-500' : ''}">{node.score}</span>
+						{#if isLoggedIn()}
+							<button
+								class="hover:text-foreground {node.user_vote === -1 ? 'text-red-500' : ''}"
+								onclick={() => vote(node.id, -1)}>▼</button>
+						{/if}
+					</div>
+					<span>{new Date(node.created_at).toLocaleDateString()}</span>
+				</div>
+				<Markdown content={node.body} />
+				{#if isLoggedIn()}
+					<button
+						class="text-xs text-muted-foreground hover:text-foreground mt-1"
+						onclick={() => { replyTo = replyTo === node.id ? null : node.id; replyBody = ''; }}
+					>reply</button>
+				{/if}
+				{#if replyTo === node.id}
+					<div class="mt-2 space-y-2">
+						<Textarea bind:value={replyBody} rows={2} placeholder="Reply..." />
+						<div class="flex gap-2">
+							<Button size="sm" onclick={submitReply} disabled={!replyBody.trim()}>Reply</Button>
+							<Button size="sm" variant="outline" onclick={() => replyTo = null}>Cancel</Button>
+						</div>
+					</div>
+				{/if}
+				{#each node.children as child}
+					{@render threadNode(child)}
+				{/each}
+			</div>
+		{/snippet}
+
+		{#each tree as node}
+			{@render threadNode(node)}
+		{/each}
+
+		{#if isLoggedIn()}
+			<div class="mt-4 space-y-2">
+				<Textarea bind:value={newComment} rows={3} placeholder="Add to the discussion..." />
+				<Button onclick={submitComment} disabled={!newComment.trim()}>Post</Button>
+			</div>
+		{/if}
+	</section>
 {:else if !error}
 	<p class="text-muted-foreground text-sm">Loading...</p>
 {/if}

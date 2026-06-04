@@ -61,15 +61,30 @@ export interface Question {
 export interface Answer {
 	id: string;
 	question_id: string;
-	author_id: string | null;
-	author_type: string;
 	body: string;
+	author_id: string | null;
+	last_editor_id: string | null;
 	is_stale: boolean;
 	created_at: string;
-	rating_count: number;
-	rating_avg: number | null;
-	rating_positive_pct: number | null;
-	comment_count: number;
+	updated_at: string;
+}
+
+export interface Discussion {
+	id: string;
+	question_id: string;
+	parent_id: string | null;
+	author_id: string;
+	body: string;
+	depth: number;
+	is_deleted: boolean;
+	score: number;
+	user_vote: number | null;
+	created_at: string;
+}
+
+export interface VoteResult {
+	score: number;
+	user_vote: number | null;
 }
 
 export interface SearchResult {
@@ -117,26 +132,21 @@ export const api = {
 		request<Question>('POST', '/questions', { title, body, tags, generate_ai_answer }),
 	search: (query: string) => request<SearchResult[]>('GET', `/search?q=${encodeURIComponent(query)}`),
 
-	// Answers
-	getAnswers: (questionId: string) => request<Answer[]>('GET', `/questions/${questionId}/answers`),
-	createAnswer: (questionId: string, body: string) =>
-		request<Answer>('POST', `/questions/${questionId}/answers`, { body }),
-	rateAnswer: (answerId: string, score: number) =>
-		request<{ id: string; answer_id: string; rater_id: string; score: number }>('POST', `/answers/${answerId}/ratings`, { score }),
-	deleteRating: (answerId: string) =>
-		request<void>('DELETE', `/answers/${answerId}/ratings/mine`),
-	getRatings: (answerId: string) =>
-		request<Paginated<{ id: string; rater_id: string; score: number }>>('GET', `/answers/${answerId}/ratings`),
+	// Wiki Answer
+	getWikiAnswer: (questionId: string) =>
+		request<Answer>('GET', `/questions/${questionId}/wiki-answer`),
+	editWikiAnswer: (questionId: string, body: string, editMessage?: string) =>
+		request<Answer>('PUT', `/questions/${questionId}/wiki-answer`, { body, edit_message: editMessage }),
 
-	// Comments
-	getQuestionComments: (questionId: string) =>
-		request<Paginated<Comment>>('GET', `/questions/${questionId}/comments`),
-	getAnswerComments: (answerId: string) =>
-		request<Paginated<Comment>>('GET', `/answers/${answerId}/comments`),
-	createQuestionComment: (questionId: string, body: string) =>
-		request<Comment>('POST', `/questions/${questionId}/comments`, { body }),
-	createAnswerComment: (answerId: string, body: string) =>
-		request<Comment>('POST', `/answers/${answerId}/comments`, { body }),
+	// Discussions
+	listDiscussions: (questionId: string, parentId?: string) => {
+		const params = parentId ? `?parent_id=${parentId}` : '';
+		return request<Discussion[]>('GET', `/questions/${questionId}/discussions${params}`);
+	},
+	createDiscussion: (questionId: string, body: string, parentId?: string) =>
+		request<Discussion>('POST', `/questions/${questionId}/discussions`, { body, parent_id: parentId }),
+	voteDiscussion: (discussionId: string, direction: number) =>
+		request<VoteResult>('POST', `/discussions/${discussionId}/vote`, { direction }),
 
 	// Tags
 	listTags: () => request<{ tag: string; count: number }[]>('GET', '/tags'),

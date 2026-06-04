@@ -186,3 +186,35 @@ pub struct AuthConfig {
     pub github_client_id: String,
     pub google_enabled: bool,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WikiAnswerResponse {
+    pub id: Uuid,
+    pub question_id: Uuid,
+    pub body: String,
+    pub author_id: Option<Uuid>,
+    pub last_editor_id: Option<Uuid>,
+    pub is_stale: bool,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DiscussionResponse {
+    pub id: Uuid,
+    pub question_id: Uuid,
+    pub parent_id: Option<Uuid>,
+    pub author_id: Uuid,
+    pub body: String,
+    pub depth: i32,
+    pub is_deleted: bool,
+    pub score: i64,
+    pub user_vote: Option<i16>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VoteResponse {
+    pub score: i64,
+    pub user_vote: Option<i16>,
+}

@@ -169,6 +169,83 @@ impl Client {
         Self::handle(resp).await
     }
 
+    // Wiki Answers
+    pub async fn get_wiki_answer(&self, question_id: Uuid) -> Result<WikiAnswerResponse, Error> {
+        let resp = self
+            .request(
+                reqwest::Method::GET,
+                &format!("/questions/{}/wiki-answer", question_id),
+            )
+            .send()
+            .await?;
+        Self::handle(resp).await
+    }
+
+    pub async fn edit_wiki_answer(
+        &self,
+        question_id: Uuid,
+        body: &str,
+        edit_message: Option<&str>,
+    ) -> Result<WikiAnswerResponse, Error> {
+        let resp = self
+            .request(
+                reqwest::Method::PUT,
+                &format!("/questions/{}/wiki-answer", question_id),
+            )
+            .json(&serde_json::json!({ "body": body, "edit_message": edit_message }))
+            .send()
+            .await?;
+        Self::handle(resp).await
+    }
+
+    // Discussions
+    pub async fn list_discussions(
+        &self,
+        question_id: Uuid,
+        parent_id: Option<Uuid>,
+    ) -> Result<Vec<DiscussionResponse>, Error> {
+        let mut path = format!("/questions/{}/discussions", question_id);
+        if let Some(pid) = parent_id {
+            path.push_str(&format!("?parent_id={}", pid));
+        }
+        let resp = self.request(reqwest::Method::GET, &path).send().await?;
+        Self::handle(resp).await
+    }
+
+    pub async fn create_discussion(
+        &self,
+        question_id: Uuid,
+        body: &str,
+        parent_id: Option<Uuid>,
+    ) -> Result<DiscussionResponse, Error> {
+        let resp = self
+            .request(
+                reqwest::Method::POST,
+                &format!("/questions/{}/discussions", question_id),
+            )
+            .json(&serde_json::json!({ "body": body, "parent_id": parent_id }))
+            .send()
+            .await?;
+        Self::handle(resp).await
+    }
+
+    // Discussion Votes
+    pub async fn vote_discussion(
+        &self,
+        discussion_id: Uuid,
+        direction: i16,
+    ) -> Result<VoteResponse, Error> {
+        let resp = self
+            .request(
+                reqwest::Method::POST,
+                &format!("/discussions/{}/vote", discussion_id),
+            )
+            .json(&serde_json::json!({ "direction": direction }))
+            .send()
+            .await?;
+        Self::handle(resp).await
+    }
+
     pub async fn get_answers(&self, question_id: Uuid) -> Result<Vec<AnswerResponse>, Error> {
         let resp = self
             .request(
