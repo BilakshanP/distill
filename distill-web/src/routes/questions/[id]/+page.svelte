@@ -15,8 +15,6 @@
 	let newComment = $state('');
 	let replyTo = $state<string | null>(null);
 	let replyBody = $state('');
-	let editing = $state(false);
-	let editBody = $state('');
 	let error = $state('');
 
 	const id = $derived($page.params.id!);
@@ -58,19 +56,6 @@
 				d.id === discussionId ? { ...d, score: result.score, user_vote: result.user_vote } : d
 			);
 		} catch (e: any) { error = e.message; }
-	}
-
-	async function saveEdit() {
-		if (!editBody.trim()) return;
-		try {
-			wikiAnswer = await api.editWikiAnswer(id, editBody, 'Edited via web');
-			editing = false;
-		} catch (e: any) { error = e.message; }
-	}
-
-	function startEdit() {
-		editBody = wikiAnswer?.body || '';
-		editing = true;
 	}
 
 	// Build tree from flat list
@@ -122,22 +107,14 @@
 	<section class="space-y-4">
 		<div class="flex items-center justify-between">
 			<h2 class="text-lg font-semibold">Answer</h2>
-			{#if isLoggedIn() && !editing}
-				<Button variant="outline" size="sm" onclick={startEdit}>
+			{#if isLoggedIn()}
+				<Button variant="outline" size="sm" href="/questions/{id}/edit">
 					{wikiAnswer ? 'Edit' : 'Write Answer'}
 				</Button>
 			{/if}
 		</div>
 
-		{#if editing}
-			<div class="space-y-3">
-				<Textarea bind:value={editBody} rows={8} placeholder="Write or edit the answer (markdown supported)..." />
-				<div class="flex gap-2">
-					<Button onclick={saveEdit} disabled={!editBody.trim()}>Save</Button>
-					<Button variant="outline" onclick={() => editing = false}>Cancel</Button>
-				</div>
-			</div>
-		{:else if wikiAnswer}
+		{#if wikiAnswer}
 			<Card.Root>
 				<Card.Content class="pt-6">
 					<Markdown content={wikiAnswer.body} />
