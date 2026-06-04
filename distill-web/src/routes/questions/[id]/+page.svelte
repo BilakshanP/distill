@@ -22,6 +22,7 @@
 	let answerDiscussions = $state<Record<string, Discussion[]>>({});
 	let showAnswerThreads = $state<Record<string, boolean>>({});
 	let answerReplyBody = $state<Record<string, string>>({});
+	let myAnswerRatings = $state<Record<string, number>>({});
 	let error = $state('');
 
 	const id = $derived($page.params.id!);
@@ -76,8 +77,15 @@
 
 	async function rateIndividual(answerId: string, score: number) {
 		try {
-			const result = await api.rateAnswer(answerId, score);
-			answers = answers.map(a => a.id === answerId ? { ...a, rating_avg: result.rating_avg, rating_count: result.rating_count } : a);
+			if (myAnswerRatings[answerId] === score) {
+				await api.deleteAnswerRating(answerId);
+				delete myAnswerRatings[answerId];
+			} else {
+				const result = await api.rateAnswer(answerId, score);
+				myAnswerRatings[answerId] = score;
+				answers = answers.map(a => a.id === answerId ? { ...a, rating_avg: result.rating_avg, rating_count: result.rating_count } : a);
+			}
+			myAnswerRatings = { ...myAnswerRatings };
 		} catch (e: any) { error = e.message; }
 	}
 
@@ -261,10 +269,13 @@
 							<span class="text-xs mr-1">Rate:</span>
 							{#each [1, 2, 3, 4, 5] as score}
 								<button
-									class="px-2 py-0.5 text-xs border rounded hover:border-primary/50"
+									class="px-2 py-0.5 text-xs border rounded transition-colors {myAnswerRatings[a.id] === score ? 'bg-primary text-primary-foreground border-primary' : 'border-border hover:border-primary/50'}"
 									onclick={() => rateIndividual(a.id, score)}
 								>{score}</button>
 							{/each}
+							{#if myAnswerRatings[a.id]}
+								<span class="text-xs text-muted-foreground ml-2">Your rating: {myAnswerRatings[a.id]}/5</span>
+							{/if}
 							<button class="ml-auto text-xs text-muted-foreground hover:text-foreground" onclick={() => toggleAnswerThread(a.id)}>
 								{showAnswerThreads[a.id] ? 'Hide' : 'Discuss'}
 							</button>
