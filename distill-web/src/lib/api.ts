@@ -130,7 +130,7 @@ export const api = {
 	getQuestion: (id: string) => request<Question>('GET', `/questions/${id}`),
 	createQuestion: (title: string, body: string, tags: string[], generate_ai_answer = false) =>
 		request<Question>('POST', '/questions', { title, body, tags, generate_ai_answer }),
-	search: (query: string) => request<SearchResult[]>('GET', `/search?q=${encodeURIComponent(query)}`),
+	search: (query: string) => request<SearchResult[]>('GET', `/questions/search?q=${encodeURIComponent(query)}`),
 
 	// Wiki Answer
 	getWikiAnswer: (questionId: string) =>
