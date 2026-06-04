@@ -238,115 +238,81 @@ INSERT INTO answers (question_id, author_id, author_type, body, created_at) VALU
 ((SELECT id FROM questions WHERE title LIKE '%Consistent hashing%'), 'a0000000-0000-0000-0000-000000000005', 'human', 'We use 256 virtual nodes and it gives us within 5% load variance across 8 nodes. Less than 100 and we saw 20%+ imbalance. The routing table overhead is negligible — it''s just a sorted array of hashes.', now() - interval '7 days 10 hours');
 
 -- ============================================================
--- RATINGS (60 ratings, scores 1-5, scale_type 'stars_5')
--- Using subqueries on answer body to match answer IDs
+-- RATINGS (60 ratings across answers)
 -- ============================================================
-INSERT INTO ratings (answer_id, rater_id, score, scale_type, comment, rater_original_query, created_at) VALUES
-((SELECT id FROM answers WHERE body LIKE '%Arc tip saved me%' LIMIT 1), 'a0000000-0000-0000-0000-000000000004', 5, 'stars_5', 'Exactly what I needed, the Arc tip saved me hours', 'async lifetime rust', now() - interval '28 days 10 hours'),
-((SELECT id FROM answers WHERE body LIKE '%core issue is that async blocks%' LIMIT 1), 'a0000000-0000-0000-0000-000000000004', 5, 'stars_5', 'Comprehensive breakdown of the problem', 'rust async reference not live long enough', now() - interval '28 days 8 hours'),
-((SELECT id FROM answers WHERE body LIKE '%core issue is that async blocks%' LIMIT 1), 'a0000000-0000-0000-0000-000000000006', 4, 'stars_5', 'Good explanation but could use a code example', 'lifetimes across await', now() - interval '27 days 22 hours'),
-((SELECT id FROM answers WHERE body LIKE '%bon crate for derive-based%' LIMIT 1), 'a0000000-0000-0000-0000-000000000002', 4, 'stars_5', 'bon crate suggestion is solid', 'rust builder pattern', now() - interval '27 days 6 hours'),
-((SELECT id FROM answers WHERE body LIKE '%three common approaches%' LIMIT 1), 'a0000000-0000-0000-0000-000000000002', 5, 'stars_5', 'Best summary of builder approaches I''ve seen', 'idiomatic rust builders', now() - interval '27 days 2 hours'),
-((SELECT id FROM answers WHERE body LIKE '%Arc<RwLock<T>> using tokio%' LIMIT 1), 'a0000000-0000-0000-0000-000000000004', 4, 'stars_5', 'RwLock advice was correct for our use case', 'tokio shared state concurrency', now() - interval '26 days 12 hours'),
-((SELECT id FROM answers WHERE body LIKE '%dashmap%' LIMIT 1), 'a0000000-0000-0000-0000-000000000004', 5, 'stars_5', 'dashmap was a game changer, thanks!', 'concurrent hashmap rust', now() - interval '26 days 8 hours'),
-((SELECT id FROM answers WHERE body LIKE '%standard architecture is%' LIMIT 1), 'a0000000-0000-0000-0000-000000000005', 5, 'stars_5', 'Clean architecture pattern, adopted immediately', 'error handling across crates rust', now() - interval '24 days 10 hours'),
-((SELECT id FROM answers WHERE body LIKE '%standard architecture is%' LIMIT 1), 'a0000000-0000-0000-0000-000000000003', 4, 'stars_5', 'Solid advice on error boundaries', 'thiserror vs anyhow when', now() - interval '24 days 6 hours'),
-((SELECT id FROM answers WHERE body LIKE '%zero-copy is worth it only%' LIMIT 1), 'a0000000-0000-0000-0000-000000000006', 3, 'stars_5', 'Helpful but our case was different since we store parsed results', 'serde performance large json', now() - interval '21 days 4 hours'),
-((SELECT id FROM answers WHERE body LIKE '%Zero-copy deserialization is worth%' LIMIT 1), 'a0000000-0000-0000-0000-000000000006', 5, 'stars_5', 'The Cow advice is exactly right', 'zero copy deserialization tradeoffs', now() - interval '20 days 22 hours'),
-((SELECT id FROM answers WHERE body LIKE '%derive_builder crate source%' LIMIT 1), 'a0000000-0000-0000-0000-000000000007', 4, 'stars_5', 'Good starting point for proc macros', 'derive macro tutorial', now() - interval '17 days 10 hours'),
-((SELECT id FROM answers WHERE body LIKE '%GIN indexes are not used%' LIMIT 1), 'a0000000-0000-0000-0000-000000000003', 5, 'stars_5', 'This fixed our exact issue with GIN indexes', 'postgresql jsonb index not working', now() - interval '27 days 8 hours'),
-((SELECT id FROM answers WHERE body LIKE '%jsonb query used ->>%' LIMIT 1), 'a0000000-0000-0000-0000-000000000003', 5, 'stars_5', 'Switching to @> operator worked perfectly', 'gin index jsonb query slow', now() - interval '27 days 4 hours'),
-((SELECT id FROM answers WHERE body LIKE '%Single query (CTE approach)%' LIMIT 1), 'a0000000-0000-0000-0000-000000000004', 5, 'stars_5', 'The CTE approach works great for our use case', 'hybrid search pgvector tsvector combine', now() - interval '25 days 10 hours'),
-((SELECT id FROM answers WHERE body LIKE '%went with RLS and don''t regret%' LIMIT 1), 'a0000000-0000-0000-0000-000000000005', 4, 'stars_5', 'Good real-world experience shared', 'row level security postgres experience', now() - interval '23 days 8 hours'),
-((SELECT id FROM answers WHERE body LIKE '%RLS pros%' LIMIT 1), 'a0000000-0000-0000-0000-000000000005', 5, 'stars_5', 'Balanced pros/cons analysis', 'rls vs application filtering', now() - interval '23 days 4 hours'),
-((SELECT id FROM answers WHERE body LIKE '%CREATE INDEX CONCURRENTLY%' AND author_type = 'human' LIMIT 1), 'a0000000-0000-0000-0000-000000000008', 5, 'stars_5', 'These are exactly the rules we now follow', 'online schema migration postgresql', now() - interval '20 days 6 hours'),
-((SELECT id FROM answers WHERE body LIKE '%Safe online DDL patterns%' LIMIT 1), 'a0000000-0000-0000-0000-000000000008', 5, 'stars_5', 'Comprehensive and practical', 'zero downtime ddl postgres', now() - interval '20 days 2 hours'),
-((SELECT id FROM answers WHERE body LIKE '%Range by month is the right%' LIMIT 1), 'a0000000-0000-0000-0000-000000000002', 4, 'stars_5', 'Range partitioning confirmed our approach', 'time series partitioning postgresql', now() - interval '18 days 10 hours'),
-((SELECT id FROM answers WHERE body LIKE '%Tuning autovacuum for high-update%' LIMIT 1), 'a0000000-0000-0000-0000-000000000006', 5, 'stars_5', 'The per-table autovacuum settings were key', 'autovacuum tuning high update table', now() - interval '14 days 6 hours'),
-((SELECT id FROM answers WHERE body LIKE '%Redis with a sliding window log%' LIMIT 1), 'a0000000-0000-0000-0000-000000000007', 4, 'stars_5', 'Redis approach is pragmatic', 'distributed rate limiter implementation', now() - interval '26 days 4 hours'),
-((SELECT id FROM answers WHERE body LIKE '%Options ranked by complexity%' LIMIT 1), 'a0000000-0000-0000-0000-000000000007', 5, 'stars_5', 'Great ranking of options by complexity', 'rate limiting distributed api', now() - interval '26 days 2 hours'),
-((SELECT id FROM answers WHERE body LIKE '%Audit log approach%' LIMIT 1), 'a0000000-0000-0000-0000-000000000002', 5, 'stars_5', 'Audit log approach saved us months', 'event sourcing small team', now() - interval '24 days 8 hours'),
-((SELECT id FROM answers WHERE body LIKE '%Counterpoint: if your domain%' LIMIT 1), 'a0000000-0000-0000-0000-000000000002', 4, 'stars_5', 'Valid counterpoint about domain complexity', 'event sourcing when worth it', now() - interval '24 days 4 hours'),
-((SELECT id FROM answers WHERE body LIKE '%Architecture for millions%' LIMIT 1), 'a0000000-0000-0000-0000-000000000004', 5, 'stars_5', 'Architecture is clean and scalable', 'notification system millions users', now() - interval '22 days 6 hours'),
-((SELECT id FROM answers WHERE body LIKE '%read-your-writes%' LIMIT 1), 'a0000000-0000-0000-0000-000000000005', 4, 'stars_5', 'Simple and effective solution', 'cqrs read after write consistency', now() - interval '19 days 10 hours'),
-((SELECT id FROM answers WHERE body LIKE '%Reliable webhook system architecture%' LIMIT 1), 'a0000000-0000-0000-0000-000000000003', 5, 'stars_5', 'Outbox pattern is the right foundation', 'webhook delivery system reliable', now() - interval '15 days 8 hours'),
-((SELECT id FROM answers WHERE body LIKE '%500 rps, I''d use%' LIMIT 1), 'a0000000-0000-0000-0000-000000000008', 4, 'stars_5', 'Good starting thresholds', 'circuit breaker settings production', now() - interval '11 days 8 hours'),
-((SELECT id FROM answers WHERE body LIKE '%dorny/paths-filter%' LIMIT 1), 'a0000000-0000-0000-0000-000000000006', 4, 'stars_5', 'paths-filter works well for us too', 'monorepo ci selective build', now() - interval '25 days 4 hours'),
-((SELECT id FROM answers WHERE body LIKE '%Most reliable Docker caching%' LIMIT 1), 'a0000000-0000-0000-0000-000000000007', 5, 'stars_5', 'cargo-chef recipe approach cut our CI from 15min to 3min', 'docker rust build time', now() - interval '23 days 8 hours'),
-((SELECT id FROM answers WHERE body LIKE '%Terraform is simpler to onboard%' LIMIT 1), 'a0000000-0000-0000-0000-000000000002', 4, 'stars_5', 'Agreed on Terraform for small teams', 'terraform vs pulumi decision', now() - interval '21 days 6 hours'),
-((SELECT id FROM answers WHERE body LIKE '%ALB + two target groups%' LIMIT 1), 'a0000000-0000-0000-0000-000000000008', 4, 'stars_5', 'ALB target group swap is simpler than CodeDeploy', 'ecs blue green simple', now() - interval '18 days 6 hours'),
-((SELECT id FROM answers WHERE body LIKE '%AWS Secrets Manager + a simple wrapper%' LIMIT 1), 'a0000000-0000-0000-0000-000000000004', 5, 'stars_5', 'Pragmatic advice for startups', 'secrets management startup', now() - interval '16 days 4 hours'),
-((SELECT id FROM answers WHERE body LIKE '%Cost comparison (rough%' LIMIT 1), 'a0000000-0000-0000-0000-000000000003', 5, 'stars_5', 'Cost breakdown is very helpful', 'grafana vs datadog cost comparison', now() - interval '13 days 8 hours'),
-((SELECT id FROM answers WHERE body LIKE '%rotate refresh tokens on every use%' LIMIT 1), 'a0000000-0000-0000-0000-000000000005', 5, 'stars_5', 'Token family approach is clever', 'refresh token rotation security', now() - interval '26 days 8 hours'),
-((SELECT id FROM answers WHERE body LIKE '%SSE is sufficient when%' LIMIT 1), 'a0000000-0000-0000-0000-000000000006', 5, 'stars_5', 'HTTP/2 multiplexing point sold me on SSE', 'sse vs websockets decision', now() - interval '22 days 4 hours'),
-((SELECT id FROM answers WHERE body LIKE '%Stripe uses cursor pagination%' LIMIT 1), 'a0000000-0000-0000-0000-000000000002', 4, 'stars_5', 'Stripe''s approach is a good reference', 'cursor pagination implementation', now() - interval '20 days 4 hours'),
-((SELECT id FROM answers WHERE body LIKE '%S3 multipart upload%' LIMIT 1), 'a0000000-0000-0000-0000-000000000002', 4, 'stars_5', 'Multipart presigned approach works', 'large file upload s3 resume', now() - interval '17 days 4 hours'),
-((SELECT id FROM answers WHERE body LIKE '%Safe dynamic CORS pattern%' LIMIT 1), 'a0000000-0000-0000-0000-000000000008', 5, 'stars_5', 'Vary: Origin tip prevented a cache bug for us', 'cors dynamic origin whitelist', now() - interval '13 days 4 hours'),
-((SELECT id FROM answers WHERE body LIKE '%custom extractor that wraps validator%' LIMIT 1), 'a0000000-0000-0000-0000-000000000002', 4, 'stars_5', 'Clean extractor pattern', 'axum validation error handling', now() - interval '9 days 8 hours'),
-((SELECT id FROM answers WHERE body LIKE '%Bootstrapping RAG evaluation%' LIMIT 1), 'a0000000-0000-0000-0000-000000000003', 5, 'stars_5', 'RAGAS framework recommendation was perfect', 'rag evaluation no labels', now() - interval '25 days 6 hours'),
-((SELECT id FROM answers WHERE body LIKE '%RAGAS with synthetic data%' LIMIT 1), 'a0000000-0000-0000-0000-000000000003', 4, 'stars_5', 'Production experience adds credibility', 'evaluate rag pipeline', now() - interval '25 days 2 hours'),
-((SELECT id FROM answers WHERE body LIKE '%Practical chunking guidelines%' LIMIT 1), 'a0000000-0000-0000-0000-000000000005', 5, 'stars_5', 'Chunk size recommendations matched our experiments', 'document chunking size rag', now() - interval '22 days 4 hours'),
-((SELECT id FROM answers WHERE body LIKE '%two-pass approach%' LIMIT 1), 'a0000000-0000-0000-0000-000000000006', 4, 'stars_5', 'Two-pass approach is pragmatic', 'hallucination detection production', now() - interval '19 days 6 hours'),
-((SELECT id FROM answers WHERE body LIKE '%Production hallucination detection%' LIMIT 1), 'a0000000-0000-0000-0000-000000000006', 5, 'stars_5', 'Comprehensive detection techniques', 'llm grounding verification', now() - interval '19 days 2 hours'),
-((SELECT id FROM answers WHERE body LIKE '%Quick decision tree%' LIMIT 1), 'a0000000-0000-0000-0000-000000000008', 5, 'stars_5', 'Decision tree is super clear', 'rag vs fine tuning when', now() - interval '16 days 4 hours'),
-((SELECT id FROM answers WHERE body LIKE '%bounded channel between the LLM%' LIMIT 1), 'a0000000-0000-0000-0000-000000000002', 4, 'stars_5', 'Bounded channel approach is elegant', 'llm streaming memory management', now() - interval '12 days 4 hours'),
-((SELECT id FROM answers WHERE body LIKE '%Implementing backpressure for LLM%' LIMIT 1), 'a0000000-0000-0000-0000-000000000002', 5, 'stars_5', 'Memory budget calculation is very useful', 'sse backpressure implementation', now() - interval '12 days 2 hours'),
-((SELECT id FROM answers WHERE body LIKE '%E5-large-v2 and saw equivalent%' LIMIT 1), 'a0000000-0000-0000-0000-000000000007', 5, 'stars_5', 'Cost savings are compelling', 'open source embeddings vs openai', now() - interval '8 days 8 hours'),
-((SELECT id FROM answers WHERE body LIKE '%Practical RBAC with resource-level%' LIMIT 1), 'a0000000-0000-0000-0000-000000000004', 5, 'stars_5', 'Centralized policy engine approach is clean', 'rbac per resource permissions', now() - interval '24 days 4 hours'),
-((SELECT id FROM answers WHERE body LIKE '%resolve DNS yourself%' LIMIT 1), 'a0000000-0000-0000-0000-000000000004', 4, 'stars_5', 'DNS resolution + IP pinning is the right answer', 'prevent ssrf webhook', now() - interval '20 days 4 hours'),
-((SELECT id FROM answers WHERE body LIKE '%strict CSP that breaks things%' LIMIT 1), 'a0000000-0000-0000-0000-000000000007', 4, 'stars_5', 'Sandboxed iframe approach is smart', 'csp user content xss', now() - interval '15 days 4 hours'),
-((SELECT id FROM answers WHERE body LIKE '%Graceful key rotation playbook%' LIMIT 1), 'a0000000-0000-0000-0000-000000000007', 5, 'stars_5', 'Step-by-step rotation playbook is actionable', 'api key rotation without downtime', now() - interval '10 days 4 hours'),
-((SELECT id FROM answers WHERE body LIKE '%whitelist approach. Map user input%' LIMIT 1), 'a0000000-0000-0000-0000-000000000008', 4, 'stars_5', 'Enum allowlist is simple and effective', 'dynamic sql safe column names', now() - interval '6 days 4 hours'),
-((SELECT id FROM answers WHERE body LIKE '%Safe dynamic query construction%' LIMIT 1), 'a0000000-0000-0000-0000-000000000008', 5, 'stars_5', 'Complete and practical guide', 'sql injection query builder prevention', now() - interval '6 days 2 hours'),
-((SELECT id FROM answers WHERE body LIKE '%leader with the higher term wins%' LIMIT 1), 'a0000000-0000-0000-0000-000000000006', 5, 'stars_5', 'Clear explanation of term-based resolution', 'raft split brain what happens', now() - interval '23 days 4 hours'),
-((SELECT id FROM answers WHERE body LIKE '%Client-generated idempotency keys are standard%' LIMIT 1), 'a0000000-0000-0000-0000-000000000002', 5, 'stars_5', 'Safeguards against misuse are well thought out', 'idempotency api design', now() - interval '18 days 4 hours'),
-((SELECT id FROM answers WHERE body LIKE '%2PC is basically unusable%' LIMIT 1), 'a0000000-0000-0000-0000-000000000004', 4, 'stars_5', 'Practical advice on sagas', 'saga vs 2pc microservices', now() - interval '14 days 4 hours'),
-((SELECT id FROM answers WHERE body LIKE '%compensating transactions are hard%' LIMIT 1), 'a0000000-0000-0000-0000-000000000004', 4, 'stars_5', 'Reservation pattern is a great tip', 'compensating transactions payment', now() - interval '14 days 2 hours'),
-((SELECT id FROM answers WHERE body LIKE '%Virtual nodes in consistent hashing%' LIMIT 1), 'a0000000-0000-0000-0000-000000000005', 5, 'stars_5', 'Virtual node count guidance is specific and useful', 'consistent hashing how many vnodes', now() - interval '7 days 4 hours'),
-((SELECT id FROM answers WHERE body LIKE '%256 virtual nodes%' LIMIT 1), 'a0000000-0000-0000-0000-000000000005', 4, 'stars_5', '256 vnodes confirmed with real numbers', 'virtual nodes load balancing', now() - interval '7 days 2 hours');
+INSERT INTO ratings (answer_id, rater_id, score, scale_type, comment, created_at)
+SELECT a.id,
+  ('a0000000-0000-0000-0000-00000000000' || (2 + (row_number() OVER ()) % 7))::uuid,
+  1 + (abs(hashtext(a.id::text || row_number() OVER ()::text)) % 5),
+  'stars_5',
+  (ARRAY['Very helpful answer', 'Good explanation', 'Could be more detailed', 'Exactly what I needed', 'Solid advice', 'Helped me solve my issue', 'Clear and concise', 'Great real-world example', 'This should be the accepted answer', 'Saved me hours of debugging'])[1 + abs(hashtext(a.id::text)) % 10],
+  a.created_at + interval '1 day' + (random() * interval '5 days')
+FROM answers a
+ORDER BY a.created_at
+LIMIT 60;
 
 -- ============================================================
--- COMMENTS (40 comments, mix on questions and answers)
+-- COMMENTS on questions (15)
 -- ============================================================
+INSERT INTO comments (question_id, author_id, body, created_at)
+SELECT q.id,
+  ('a0000000-0000-0000-0000-00000000000' || (1 + (row_number() OVER ()) % 8))::uuid,
+  (ARRAY[
+    'Can you share the exact error message?',
+    'What version are you running?',
+    'Have you tried the latest release?',
+    'This is a common issue, see the docs.',
+    'Interesting question, following.',
+    'We hit this exact problem last week.',
+    'What''s your deployment environment?',
+    'Can you share a minimal reproduction?',
+    'This might be related to a known bug.',
+    'Are you using the async or sync variant?',
+    'What OS and architecture?',
+    'Have you checked the issue tracker?',
+    'Duplicate of #34 perhaps?',
+    'Great question, upvoted.',
+    'The answer depends on your scale requirements.'
+  ])[1 + (row_number() OVER ()) % 15],
+  q.created_at + interval '2 hours' + (random() * interval '3 days')
+FROM questions q
+ORDER BY q.created_at
+LIMIT 15;
 
--- Comments on questions
-INSERT INTO comments (question_id, answer_id, author_id, body, created_at) VALUES
-((SELECT id FROM questions WHERE title LIKE '%lifetimes in async%'), NULL, 'a0000000-0000-0000-0000-000000000005', 'Can you share the exact compiler error? That would help narrow it down.', now() - interval '29 days 2 hours'),
-((SELECT id FROM questions WHERE title LIKE '%Builder pattern in Rust%'), NULL, 'a0000000-0000-0000-0000-000000000004', 'Are you targeting stable Rust? Some typestate approaches need nightly features.', now() - interval '28 days 2 hours'),
-((SELECT id FROM questions WHERE title LIKE '%Arc<Mutex<T>> vs channels%'), NULL, 'a0000000-0000-0000-0000-000000000002', 'How many concurrent readers vs writers? That ratio matters a lot for the choice.', now() - interval '27 days 4 hours'),
-((SELECT id FROM questions WHERE title LIKE '%pgvector for hybrid search%'), NULL, 'a0000000-0000-0000-0000-000000000003', 'What embedding model and dimension size are you using? That affects index choice.', now() - interval '26 days 4 hours'),
-((SELECT id FROM questions WHERE title LIKE '%Event sourcing vs CRUD%'), NULL, 'a0000000-0000-0000-0000-000000000007', 'What kind of financial system? Trading vs accounting has very different event patterns.', now() - interval '25 days 4 hours'),
-((SELECT id FROM questions WHERE title LIKE '%notification system that scales%'), NULL, 'a0000000-0000-0000-0000-000000000006', 'Are all notifications time-sensitive or can some be batched into digests?', now() - interval '23 days 4 hours'),
-((SELECT id FROM questions WHERE title LIKE '%JWT refresh token rotation%'), NULL, 'a0000000-0000-0000-0000-000000000008', 'Have you considered using opaque tokens with server-side sessions instead of JWTs?', now() - interval '27 days 4 hours'),
-((SELECT id FROM questions WHERE title LIKE '%Terraform vs Pulumi%'), NULL, 'a0000000-0000-0000-0000-000000000005', 'Consider also CDK if you''re all-in on AWS. Native integration is nice.', now() - interval '22 days 4 hours'),
-((SELECT id FROM questions WHERE title LIKE '%RAG retrieval quality%'), NULL, 'a0000000-0000-0000-0000-000000000002', 'How large is your document corpus? That affects which metrics matter most.', now() - interval '26 days 4 hours'),
-((SELECT id FROM questions WHERE title LIKE '%detect and handle LLM hallucinations%'), NULL, 'a0000000-0000-0000-0000-000000000004', 'What percentage of your answers are currently hallucinated? Helps gauge urgency.', now() - interval '20 days 4 hours'),
-((SELECT id FROM questions WHERE title LIKE '%Saga pattern vs 2PC%'), NULL, 'a0000000-0000-0000-0000-000000000006', 'Are your services on the same network or across regions? Latency affects the choice.', now() - interval '15 days 4 hours'),
-((SELECT id FROM questions WHERE title LIKE '%Consistent hashing%'), NULL, 'a0000000-0000-0000-0000-000000000003', 'Are you using a jump hash or ring-based hash? Different tradeoffs for rebalancing.', now() - interval '8 days 4 hours'),
-((SELECT id FROM questions WHERE title LIKE '%RBAC with resource-level%'), NULL, 'a0000000-0000-0000-0000-000000000008', 'Have you looked at Zanzibar/SpiceDB? Google''s approach solves exactly this.', now() - interval '25 days 4 hours'),
-((SELECT id FROM questions WHERE title LIKE '%Observability stack%'), NULL, 'a0000000-0000-0000-0000-000000000004', 'Don''t forget the hidden cost of Datadog: custom metrics get expensive fast.', now() - interval '14 days 4 hours'),
-((SELECT id FROM questions WHERE title LIKE '%Docker layer caching%'), NULL, 'a0000000-0000-0000-0000-000000000003', 'sccache with S3 backend is another option worth exploring alongside cargo-chef.', now() - interval '24 days 4 hours');
-
--- Comments on answers
-INSERT INTO comments (question_id, answer_id, author_id, body, created_at) VALUES
-(NULL, (SELECT id FROM answers WHERE body LIKE '%Arc tip saved me%' LIMIT 1), 'a0000000-0000-0000-0000-000000000002', 'Arc works but adds runtime overhead. If you can restructure to avoid sharing, that''s better.', now() - interval '28 days 6 hours'),
-(NULL, (SELECT id FROM answers WHERE body LIKE '%bon crate for derive-based%' LIMIT 1), 'a0000000-0000-0000-0000-000000000003', 'bon is relatively new — is it production-ready? Any compile time impact?', now() - interval '27 days 8 hours'),
-(NULL, (SELECT id FROM answers WHERE body LIKE '%dashmap%' LIMIT 1), 'a0000000-0000-0000-0000-000000000004', 'Note: dashmap had some soundness issues in the past. Make sure you''re on the latest version.', now() - interval '26 days 10 hours'),
-(NULL, (SELECT id FROM answers WHERE body LIKE '%standard architecture is%' LIMIT 1), 'a0000000-0000-0000-0000-000000000006', 'This pattern works perfectly. We use exactly this in our 15-crate workspace.', now() - interval '24 days 2 hours'),
-(NULL, (SELECT id FROM answers WHERE body LIKE '%GIN indexes are not used%' LIMIT 1), 'a0000000-0000-0000-0000-000000000004', 'The @> operator tip is crucial. This should be in every PostgreSQL jsonb tutorial.', now() - interval '27 days 6 hours'),
-(NULL, (SELECT id FROM answers WHERE body LIKE '%Single query (CTE approach)%' LIMIT 1), 'a0000000-0000-0000-0000-000000000005', 'Does this work well with pgvector HNSW indexes? Or only IVFFlat?', now() - interval '25 days 14 hours'),
-(NULL, (SELECT id FROM answers WHERE body LIKE '%RLS pros%' LIMIT 1), 'a0000000-0000-0000-0000-000000000003', 'The belt-and-suspenders approach is exactly what we do. RLS as safety net, app filtering for performance.', now() - interval '23 days 6 hours'),
-(NULL, (SELECT id FROM answers WHERE body LIKE '%Safe online DDL patterns%' LIMIT 1), 'a0000000-0000-0000-0000-000000000004', 'Adding: pg_repack is great for reclaiming space from bloated tables without locking.', now() - interval '20 days 4 hours'),
-(NULL, (SELECT id FROM answers WHERE body LIKE '%Options ranked by complexity%' LIMIT 1), 'a0000000-0000-0000-0000-000000000002', 'The Lua script approach is key — individual Redis commands aren''t atomic across MULTI/EXEC like people think.', now() - interval '25 days 22 hours'),
-(NULL, (SELECT id FROM answers WHERE body LIKE '%Architecture for millions%' LIMIT 1), 'a0000000-0000-0000-0000-000000000003', 'Would you use SQS FIFO or standard for the per-user partitioning?', now() - interval '22 days 8 hours'),
-(NULL, (SELECT id FROM answers WHERE body LIKE '%Most reliable Docker caching%' LIMIT 1), 'a0000000-0000-0000-0000-000000000006', 'This saved us so much CI time. One trick: pin your rust version in rust-toolchain.toml to avoid cache busts.', now() - interval '23 days 10 hours'),
-(NULL, (SELECT id FROM answers WHERE body LIKE '%rotate refresh tokens on every use%' LIMIT 1), 'a0000000-0000-0000-0000-000000000007', 'The grace period for concurrent requests is essential. Without it, SPAs with parallel requests break constantly.', now() - interval '26 days 10 hours'),
-(NULL, (SELECT id FROM answers WHERE body LIKE '%SSE is sufficient when%' LIMIT 1), 'a0000000-0000-0000-0000-000000000005', 'One caveat: SSE doesn''t work with HTTP/1.1 through some corporate proxies. Test with your target audience.', now() - interval '22 days 6 hours'),
-(NULL, (SELECT id FROM answers WHERE body LIKE '%Stripe uses cursor pagination%' LIMIT 1), 'a0000000-0000-0000-0000-000000000008', 'Slack also uses cursor-based. The opaque cursor lets you change implementation without breaking clients.', now() - interval '20 days 6 hours'),
-(NULL, (SELECT id FROM answers WHERE body LIKE '%Bootstrapping RAG evaluation%' LIMIT 1), 'a0000000-0000-0000-0000-000000000007', 'Have you tried using the user''s actual search queries as test inputs? More realistic than synthetic.', now() - interval '25 days 4 hours'),
-(NULL, (SELECT id FROM answers WHERE body LIKE '%Production hallucination detection%' LIMIT 1), 'a0000000-0000-0000-0000-000000000008', 'The citation forcing approach works well with Claude. Just add "cite your sources with [1] [2]" to the prompt.', now() - interval '19 days 4 hours'),
-(NULL, (SELECT id FROM answers WHERE body LIKE '%Implementing backpressure for LLM%' LIMIT 1), 'a0000000-0000-0000-0000-000000000004', 'The memory budget math is reassuring. We were over-engineering our buffer management.', now() - interval '12 days 6 hours'),
-(NULL, (SELECT id FROM answers WHERE body LIKE '%Practical RBAC with resource-level%' LIMIT 1), 'a0000000-0000-0000-0000-000000000003', 'The NULL resource_id for "all resources" is elegant. Simple but covers most cases.', now() - interval '24 days 6 hours'),
-(NULL, (SELECT id FROM answers WHERE body LIKE '%Graceful key rotation playbook%' LIMIT 1), 'a0000000-0000-0000-0000-000000000006', 'Add to step 1: immediately scan your logs for any unauthorized usage from the leaked key.', now() - interval '10 days 6 hours'),
-(NULL, (SELECT id FROM answers WHERE body LIKE '%Client-generated idempotency keys are standard%' LIMIT 1), 'a0000000-0000-0000-0000-000000000007', 'The 409 Conflict on key reuse with different body is a nice touch. Catches bugs early.', now() - interval '18 days 6 hours'),
-(NULL, (SELECT id FROM answers WHERE body LIKE '%Virtual nodes in consistent hashing%' LIMIT 1), 'a0000000-0000-0000-0000-000000000003', 'Jump consistent hash is interesting but the inability to remove nodes gracefully is a dealbreaker for us.', now() - interval '7 days 6 hours');
+-- ============================================================
+-- COMMENTS on answers (25)
+-- ============================================================
+INSERT INTO comments (answer_id, author_id, body, created_at)
+SELECT a.id,
+  ('a0000000-0000-0000-0000-00000000000' || (1 + (row_number() OVER ()) % 8))::uuid,
+  (ARRAY[
+    'Great explanation, thanks!',
+    'Could you expand on this point?',
+    'I tried this and it works perfectly.',
+    'Not sure this is correct for all cases.',
+    'This saved my day, thank you!',
+    'What about edge cases with large datasets?',
+    'Confirmed working on latest stable.',
+    'Nice approach, but consider the memory overhead.',
+    'This contradicts what the docs say.',
+    'Would love to see benchmarks.',
+    'Exactly what I was looking for.',
+    'The async version is trickier though.',
+    'Clean solution.',
+    'Does this work in production?',
+    'Solid answer, bookmarked.',
+    'One caveat: this breaks on Windows.',
+    'How does this compare to the alternative?',
+    'Adding a code example would help.',
+    'We use exactly this pattern.',
+    'The performance implications are worth noting.',
+    'This is the correct answer.',
+    'Might want to add error handling.',
+    'Simple and effective.',
+    'Love the pragmatic approach.',
+    'Worth mentioning the tradeoffs.'
+  ])[1 + (row_number() OVER ()) % 25],
+  a.created_at + interval '4 hours' + (random() * interval '5 days')
+FROM answers a
+ORDER BY random()
+LIMIT 25;

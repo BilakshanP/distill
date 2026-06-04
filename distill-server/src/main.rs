@@ -26,6 +26,21 @@ async fn main() {
         MIGRATOR.run(&db).await.expect("Failed to run migrations");
     }
 
+    if std::env::var("LOAD_EXAMPLES").unwrap_or_default() == "true" {
+        let count: (i64,) = sqlx::query_as("SELECT count(*) FROM questions")
+            .fetch_one(&db)
+            .await
+            .unwrap_or((0,));
+        if count.0 == 0 {
+            tracing::info!("loading example data");
+            let seed = include_str!("../tests/fixtures/example.sql");
+            sqlx::raw_sql(seed)
+                .execute(&db)
+                .await
+                .expect("Failed to load examples");
+        }
+    }
+
     let state = AppState {
         db,
         jwt_secret: cfg.jwt_secret,
