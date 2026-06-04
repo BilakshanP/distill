@@ -15,6 +15,7 @@
 	let newComment = $state('');
 	let replyTo = $state<string | null>(null);
 	let replyBody = $state('');
+	let myRating = $state<number | null>(null);
 	let error = $state('');
 
 	const id = $derived($page.params.id!);
@@ -25,10 +26,35 @@
 			question = await api.getQuestion(id);
 			try { wikiAnswer = await api.getWikiAnswer(id); } catch {}
 			discussions = await api.listDiscussions(id);
+
+			// Fetch own rating if logged in
+			if (isLoggedIn() && wikiAnswer) {
+				try {
+					const ratings = await api.getWikiRatings(wikiAnswer.id);
+					const uid = getUserId();
+					const mine = ratings.find(r => r.rater_id === uid);
+					if (mine) myRating = mine.score;
+				} catch {}
+			}
 		} catch (e: any) {
 			error = e.message;
 		}
 	});
+
+	async function rateAnswer(score: number) {
+		if (!wikiAnswer) return;
+		try {
+			if (myRating === score) {
+				await api.deleteWikiRating(wikiAnswer.id);
+				myRating = null;
+			} else {
+				await api.rateWikiAnswer(wikiAnswer.id, score);
+				myRating = score;
+			}
+			// Refresh answer to get updated stats
+			wikiAnswer = await api.getWikiAnswer(id);
+		} catch (e: any) { error = e.message; }
+	}
 
 	async function submitComment() {
 		if (!newComment.trim()) return;
@@ -136,6 +162,20 @@
 							<span>Lifetime: ★ {wikiAnswer.rating_avg?.toFixed(1)} ({wikiAnswer.rating_count} ratings)</span>
 							{#if wikiAnswer.rating_count_since_edit > 0}
 								<span>Since last edit: ★ {wikiAnswer.rating_avg_since_edit?.toFixed(1)} ({wikiAnswer.rating_count_since_edit})</span>
+							{/if}
+						</div>
+					{/if}
+					{#if isLoggedIn()}
+						<div class="flex items-center gap-1 w-full pt-1">
+							<span class="text-xs mr-1">Rate:</span>
+							{#each [1, 2, 3, 4, 5] as score}
+								<button
+									class="px-2 py-0.5 text-xs border rounded transition-colors {myRating === score ? 'bg-primary text-primary-foreground border-primary' : 'border-border hover:border-primary/50'}"
+									onclick={() => rateAnswer(score)}
+								>{score}</button>
+							{/each}
+							{#if myRating}
+								<span class="text-xs ml-2">Your rating: {myRating}/5</span>
 							{/if}
 						</div>
 					{/if}

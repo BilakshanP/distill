@@ -62,8 +62,6 @@ impl utoipa::Modify for SecurityAddon {
         routes::answers::dig_deeper,
         routes::answers::get_deep_dives,
         routes::ratings::create_rating,
-        routes::ratings::get_ratings,
-        routes::ratings::redact_rating,
         routes::contradictions::flag_contradiction,
         routes::contradictions::get_contradictions_for_answer,
         routes::contradictions::admin_review_queue,
@@ -249,15 +247,11 @@ pub fn build_router(state: AppState) -> Router {
             axum::routing::post(routes::answers::mark_stale),
         )
         .route(
-            "/answers/{id}/ratings",
+            "/wiki-answers/{id}/ratings",
             axum::routing::post(routes::ratings::create_rating).get(routes::ratings::get_ratings),
         )
         .route(
-            "/answers/{id}/ratings/redact",
-            axum::routing::put(routes::ratings::redact_rating),
-        )
-        .route(
-            "/answers/{id}/ratings/mine",
+            "/wiki-answers/{id}/ratings/mine",
             axum::routing::delete(routes::ratings::delete_rating),
         )
         .route(

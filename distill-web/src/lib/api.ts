@@ -150,6 +150,12 @@ export const api = {
 		request<{ id: string; editor_id: string; edit_message: string | null; created_at: string }[]>('GET', `/questions/${questionId}/wiki-answer/history`),
 	getRevision: (revisionId: string) =>
 		request<{ id: string; editor_id: string; body: string; diff: string; edit_message: string | null; created_at: string }>('GET', `/revisions/${revisionId}`),
+	rateWikiAnswer: (wikiAnswerId: string, score: number) =>
+		request<{ id: string; rater_id: string; score: number }>('POST', `/wiki-answers/${wikiAnswerId}/ratings`, { score }),
+	deleteWikiRating: (wikiAnswerId: string) =>
+		request<void>('DELETE', `/wiki-answers/${wikiAnswerId}/ratings/mine`),
+	getWikiRatings: (wikiAnswerId: string) =>
+		request<{ id: string; rater_id: string; score: number }[]>('GET', `/wiki-answers/${wikiAnswerId}/ratings`),
 
 	// Discussions
 	listDiscussions: (questionId: string, parentId?: string) => {
