@@ -172,12 +172,15 @@ export const api = {
 		request<{ id: string; rater_id: string; score: number }[]>('GET', `/wiki-answers/${wikiAnswerId}/ratings`),
 
 	// Discussions
-	listDiscussions: (questionId: string, parentId?: string) => {
-		const params = parentId ? `?parent_id=${parentId}` : '';
-		return request<Discussion[]>('GET', `/questions/${questionId}/discussions${params}`);
+	listDiscussions: (questionId: string, parentId?: string, answerId?: string) => {
+		const params = new URLSearchParams();
+		if (parentId) params.set('parent_id', parentId);
+		if (answerId) params.set('answer_id', answerId);
+		const qs = params.toString();
+		return request<Discussion[]>('GET', `/questions/${questionId}/discussions${qs ? '?' + qs : ''}`);
 	},
-	createDiscussion: (questionId: string, body: string, parentId?: string) =>
-		request<Discussion>('POST', `/questions/${questionId}/discussions`, { body, parent_id: parentId }),
+	createDiscussion: (questionId: string, body: string, parentId?: string, answerId?: string) =>
+		request<Discussion>('POST', `/questions/${questionId}/discussions`, { body, parent_id: parentId, answer_id: answerId }),
 	voteDiscussion: (discussionId: string, direction: number) =>
 		request<VoteResult>('POST', `/discussions/${discussionId}/vote`, { direction }),
 

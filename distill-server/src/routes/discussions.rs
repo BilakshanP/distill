@@ -32,6 +32,7 @@ pub struct CreateDiscussionRequest {
 #[derive(Deserialize)]
 pub struct DiscussionParams {
     pub parent_id: Option<Uuid>,
+    pub answer_id: Option<Uuid>,
     #[serde(default = "default_limit")]
     pub limit: i64,
     pub after: Option<String>,
@@ -140,6 +141,7 @@ pub async fn list_discussions(
            JOIN users u ON u.id = d.author_id
            LEFT JOIN discussion_votes v ON v.discussion_id = d.id
            WHERE d.question_id = $1 AND ($2::uuid IS NULL OR d.parent_id = $2)
+                 AND (($5::uuid IS NOT NULL AND d.answer_id = $5) OR ($5::uuid IS NULL AND d.answer_id IS NULL))
            GROUP BY d.id, u.display_name, u.role, u.avatar_url
            ORDER BY COALESCE(SUM(v.direction), 0) DESC, d.created_at ASC
            LIMIT $4"#
@@ -148,6 +150,7 @@ pub async fn list_discussions(
     .bind(params.parent_id)
     .bind(user_id)
     .bind(params.limit.min(100))
+    .bind(params.answer_id)
     .fetch_all(&state.db)
     .await
     .map_err(|e| { tracing::error!("list discussions: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;

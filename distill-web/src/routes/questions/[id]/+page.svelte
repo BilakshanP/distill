@@ -19,6 +19,9 @@
 	let myRating = $state<number | null>(null);
 	let newAnswerBody = $state('');
 	let submittingAnswer = $state(false);
+	let answerDiscussions = $state<Record<string, Discussion[]>>({});
+	let showAnswerThreads = $state<Record<string, boolean>>({});
+	let answerReplyBody = $state<Record<string, string>>({});
 	let error = $state('');
 
 	const id = $derived($page.params.id!);
@@ -75,6 +78,28 @@
 		try {
 			const result = await api.rateAnswer(answerId, score);
 			answers = answers.map(a => a.id === answerId ? { ...a, rating_avg: result.rating_avg, rating_count: result.rating_count } : a);
+		} catch (e: any) { error = e.message; }
+	}
+
+	async function toggleAnswerThread(answerId: string) {
+		showAnswerThreads[answerId] = !showAnswerThreads[answerId];
+		showAnswerThreads = { ...showAnswerThreads };
+		if (showAnswerThreads[answerId] && !answerDiscussions[answerId]) {
+			try {
+				answerDiscussions[answerId] = await api.listDiscussions(id, undefined, answerId);
+				answerDiscussions = { ...answerDiscussions };
+			} catch {}
+		}
+	}
+
+	async function submitAnswerReply(answerId: string) {
+		const body = answerReplyBody[answerId]?.trim();
+		if (!body) return;
+		try {
+			const d = await api.createDiscussion(id, body, undefined, answerId);
+			answerDiscussions[answerId] = [...(answerDiscussions[answerId] || []), d];
+			answerDiscussions = { ...answerDiscussions };
+			answerReplyBody[answerId] = '';
 		} catch (e: any) { error = e.message; }
 	}
 
@@ -231,8 +256,8 @@
 					<Markdown content={a.body} />
 				</Card.Content>
 				{#if isLoggedIn()}
-					<Card.Footer>
-						<div class="flex items-center gap-1">
+					<Card.Footer class="flex flex-col gap-2">
+						<div class="flex items-center gap-1 w-full">
 							<span class="text-xs mr-1">Rate:</span>
 							{#each [1, 2, 3, 4, 5] as score}
 								<button
@@ -240,7 +265,30 @@
 									onclick={() => rateIndividual(a.id, score)}
 								>{score}</button>
 							{/each}
+							<button class="ml-auto text-xs text-muted-foreground hover:text-foreground" onclick={() => toggleAnswerThread(a.id)}>
+								{showAnswerThreads[a.id] ? 'Hide' : 'Discuss'}
+							</button>
 						</div>
+						{#if showAnswerThreads[a.id]}
+							<div class="w-full border-t pt-2 space-y-2">
+								{#each answerDiscussions[a.id] || [] as d}
+									<div class="text-xs pl-2 border-l border-border">
+										<span class="font-medium {d.author_role === 'admin' ? 'text-amber-600' : ''}">{d.author_name}</span>: {d.body}
+									</div>
+								{/each}
+								<div class="flex gap-2">
+									<input
+										type="text"
+										class="flex-1 text-xs border border-border rounded px-2 py-1"
+										placeholder="Reply..."
+										value={answerReplyBody[a.id] || ''}
+										oninput={(e) => { answerReplyBody[a.id] = (e.target as HTMLInputElement).value; answerReplyBody = {...answerReplyBody}; }}
+										onkeydown={(e) => { if (e.key === 'Enter') submitAnswerReply(a.id); }}
+									/>
+									<button class="text-xs px-2 py-1 bg-primary text-primary-foreground rounded" onclick={() => submitAnswerReply(a.id)}>Post</button>
+								</div>
+							</div>
+						{/if}
 					</Card.Footer>
 				{/if}
 			</Card.Root>
