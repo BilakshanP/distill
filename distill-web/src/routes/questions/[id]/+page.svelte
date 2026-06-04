@@ -17,6 +17,8 @@
 	let replyBody = $state('');
 	let editing = $state(false);
 	let editBody = $state('');
+	let showHistory = $state(false);
+	let history = $state<{ id: string; editor_id: string; diff: string; edit_message: string | null; created_at: string }[]>([]);
 	let error = $state('');
 
 	const id = $derived($page.params.id!);
@@ -73,6 +75,13 @@
 		editing = true;
 	}
 
+	async function toggleHistory() {
+		if (!showHistory && history.length === 0) {
+			try { history = await api.getWikiHistory(id); } catch {}
+		}
+		showHistory = !showHistory;
+	}
+
 	// Build tree from flat list
 	function buildTree(items: Discussion[]): (Discussion & { children: Discussion[] })[] {
 		const map = new Map<string, Discussion & { children: Discussion[] }>();
@@ -88,6 +97,9 @@
 				roots.push(node);
 			}
 		}
+		const sortByScore = (a: any, b: any) => b.score - a.score;
+		const sortTree = (nodes: any[]) => { nodes.sort(sortByScore); nodes.forEach(n => sortTree(n.children)); };
+		sortTree(roots);
 		return roots;
 	}
 
@@ -139,10 +151,28 @@
 				<Card.Content class="pt-6">
 					<Markdown content={wikiAnswer.body} />
 				</Card.Content>
-				<Card.Footer class="text-xs text-muted-foreground">
-					Last updated: {new Date(wikiAnswer.updated_at).toLocaleDateString()}
+				<Card.Footer class="text-xs text-muted-foreground flex justify-between">
+					<span>Last updated: {new Date(wikiAnswer.updated_at).toLocaleDateString()}</span>
+					<button class="hover:text-foreground" onclick={toggleHistory}>
+						{showHistory ? 'Hide history' : 'View history'}
+					</button>
 				</Card.Footer>
 			</Card.Root>
+			{#if showHistory}
+				<div class="space-y-2 mt-2">
+					{#each history as edit}
+						<div class="p-3 border border-border rounded text-xs font-mono">
+							<div class="text-muted-foreground mb-1">
+								{new Date(edit.created_at).toLocaleString()}
+								{#if edit.edit_message} — {edit.edit_message}{/if}
+							</div>
+							<pre class="whitespace-pre-wrap text-xs">{edit.diff}</pre>
+						</div>
+					{:else}
+						<p class="text-muted-foreground text-xs">No edit history yet.</p>
+					{/each}
+				</div>
+			{/if}
 		{:else}
 			<p class="text-muted-foreground text-sm">No answer yet. Be the first to contribute!</p>
 		{/if}

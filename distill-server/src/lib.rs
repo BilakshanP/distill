@@ -319,6 +319,10 @@ pub fn build_router(state: AppState) -> Router {
             "/questions/{id}/wiki-answer",
             get(routes::wiki_answers::get_wiki_answer).put(routes::wiki_answers::edit_wiki_answer),
         )
+        .route(
+            "/questions/{id}/wiki-answer/history",
+            get(routes::wiki_answers::get_wiki_answer_history),
+        )
         // Discussions
         .route(
             "/questions/{id}/discussions",

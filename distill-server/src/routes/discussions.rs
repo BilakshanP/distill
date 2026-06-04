@@ -115,7 +115,7 @@ pub async fn list_discussions(
            LEFT JOIN discussion_votes v ON v.discussion_id = d.id
            WHERE d.question_id = $1 AND ($2::uuid IS NULL OR d.parent_id = $2)
            GROUP BY d.id
-           ORDER BY d.created_at ASC
+           ORDER BY COALESCE(SUM(v.direction), 0) DESC, d.created_at ASC
            LIMIT $4"#
     )
     .bind(question_id)

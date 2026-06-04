@@ -137,6 +137,8 @@ export const api = {
 		request<Answer>('GET', `/questions/${questionId}/wiki-answer`),
 	editWikiAnswer: (questionId: string, body: string, editMessage?: string) =>
 		request<Answer>('PUT', `/questions/${questionId}/wiki-answer`, { body, edit_message: editMessage }),
+	getWikiHistory: (questionId: string) =>
+		request<{ id: string; editor_id: string; diff: string; edit_message: string | null; created_at: string }[]>('GET', `/questions/${questionId}/wiki-answer/history`),
 
 	// Discussions
 	listDiscussions: (questionId: string, parentId?: string) => {

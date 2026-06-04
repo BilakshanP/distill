@@ -115,3 +115,50 @@ pub async fn edit_wiki_answer(
         updated_at: row.7,
     }))
 }
+
+#[derive(Serialize, ToSchema)]
+pub struct WikiEditResponse {
+    pub id: Uuid,
+    pub editor_id: Uuid,
+    pub diff: String,
+    pub edit_message: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub async fn get_wiki_answer_history(
+    State(state): State<AppState>,
+    Path(question_id): Path<Uuid>,
+) -> Result<Json<Vec<WikiEditResponse>>, StatusCode> {
+    let rows = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            Uuid,
+            String,
+            Option<String>,
+            chrono::DateTime<chrono::Utc>,
+        ),
+    >(
+        r#"SELECT e.id, e.editor_id, e.diff, e.edit_message, e.created_at
+           FROM wiki_answer_edits e
+           JOIN wiki_answers w ON w.id = e.wiki_answer_id
+           WHERE w.question_id = $1
+           ORDER BY e.created_at DESC"#,
+    )
+    .bind(question_id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(
+        rows.into_iter()
+            .map(|r| WikiEditResponse {
+                id: r.0,
+                editor_id: r.1,
+                diff: r.2,
+                edit_message: r.3,
+                created_at: r.4,
+            })
+            .collect(),
+    ))
+}
