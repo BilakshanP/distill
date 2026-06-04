@@ -101,6 +101,7 @@ export interface IndividualAnswer {
 	is_accepted: boolean;
 	rating_avg: number | null;
 	rating_count: number;
+	your_score: number | null;
 	created_at: string;
 	updated_at: string;
 }

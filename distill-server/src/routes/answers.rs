@@ -16,6 +16,7 @@ pub struct AnswerResponse {
     pub is_accepted: bool,
     pub rating_avg: Option<f64>,
     pub rating_count: i64,
+    pub your_score: Option<i32>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -75,6 +76,7 @@ pub async fn create_answer(
             is_accepted: false,
             rating_avg: None,
             rating_count: 0,
+            your_score: None,
             created_at: row.4,
             updated_at: row.5,
         }),
@@ -84,10 +86,20 @@ pub async fn create_answer(
 pub async fn list_answers(
     State(state): State<AppState>,
     Path(question_id): Path<Uuid>,
+    headers: axum::http::HeaderMap,
 ) -> Result<Json<Vec<AnswerResponse>>, StatusCode> {
-    let rows = sqlx::query_as::<_, (Uuid, Uuid, Uuid, String, String, String, bool, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>, i64, Option<f64>)>(
+    let user_id = headers
+        .get("authorization")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|h| h.strip_prefix("Bearer "))
+        .and_then(|token| crate::auth::jwt::validate_token(token, &state.jwt_secret).ok())
+        .map(|claims| claims.sub)
+        .unwrap_or(Uuid::nil());
+
+    let rows = sqlx::query_as::<_, (Uuid, Uuid, Uuid, String, String, String, bool, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>, i64, Option<f64>, Option<i32>)>(
         r#"SELECT a.id, a.question_id, a.author_id, u.display_name, u.role, a.body, a.is_accepted, a.created_at, a.updated_at,
-                  COALESCE(r.cnt, 0), r.avg_score
+                  COALESCE(r.cnt, 0), r.avg_score,
+                  (SELECT score FROM individual_answer_ratings WHERE answer_id = a.id AND rater_id = $2)
            FROM answers a
            JOIN users u ON u.id = a.author_id
            LEFT JOIN LATERAL (
@@ -98,6 +110,7 @@ pub async fn list_answers(
            ORDER BY a.is_accepted DESC, COALESCE(r.avg_score, 0) DESC, a.created_at ASC"#,
     )
     .bind(question_id)
+    .bind(user_id)
     .fetch_all(&state.db)
     .await
     .map_err(|e| { tracing::error!("list answers: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
@@ -116,6 +129,7 @@ pub async fn list_answers(
                 updated_at: r.8,
                 rating_count: r.9,
                 rating_avg: r.10,
+                your_score: r.11,
             })
             .collect(),
     ))

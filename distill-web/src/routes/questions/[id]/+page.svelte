@@ -36,6 +36,11 @@
 			question = await api.getQuestion(id);
 			try { wikiAnswer = await api.getWikiAnswer(id); } catch {}
 			answers = await api.listAnswers(id);
+			// Populate existing ratings
+			for (const a of answers) {
+				if (a.your_score) myAnswerRatings[a.id] = a.your_score;
+			}
+			myAnswerRatings = { ...myAnswerRatings };
 			discussions = await api.listDiscussions(id);
 
 			// Fetch own rating if logged in
