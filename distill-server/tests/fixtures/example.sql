@@ -171,3 +171,64 @@ SELECT w.id,
 FROM wiki_answers w
 ORDER BY w.created_at
 LIMIT 30;
+
+-- ============================================================
+-- INDIVIDUAL ANSWERS (30 answers across questions)
+-- ============================================================
+INSERT INTO answers (question_id, author_id, body, created_at, updated_at)
+SELECT q.id,
+  ('a0000000-0000-0000-0000-00000000000' || (1 + (row_number() OVER ()) % 8))::uuid,
+  (ARRAY[
+    'In my experience, the best approach is to start simple and iterate. We ran into this exact problem and found that the naive solution worked for 90% of cases.',
+    'I have been using this pattern in production for 2 years now. The key insight is to separate the concerns early — it pays off massively at scale.',
+    'The official docs are misleading here. What actually works is to use the builder pattern with a validation step at the end. Here is a minimal example that compiles.',
+    'We benchmarked this extensively. The TL;DR is: go with the simpler approach unless you are processing >10k requests/second. Below that threshold the difference is noise.',
+    'This is a common misconception. The real issue is not performance but correctness. You need to handle the edge case where the connection drops mid-transaction.',
+    'After trying 3 different approaches over 6 months, we settled on this: use a lightweight wrapper that handles retries transparently. Code is much cleaner now.',
+    'Hot take: most teams over-engineer this. Start with a simple mutex, add metrics, and only optimize when the numbers tell you to. Premature optimization is real.',
+    'The answer depends on your consistency requirements. If you can tolerate eventual consistency, the async approach is 10x simpler. If not, you need distributed locks.',
+    'We migrated from the old approach to this one last quarter. Migration was painless — took 2 sprints. Performance improved 40% and code complexity dropped significantly.',
+    'I wrote a blog post about this exact topic. The short version: use the type system to make invalid states unrepresentable. The compiler becomes your safety net.'
+  ])[1 + (row_number() OVER ()) % 10],
+  q.created_at + interval '4 hours' + (interval '2 hours' * (row_number() OVER () % 12)),
+  q.created_at + interval '4 hours' + (interval '2 hours' * (row_number() OVER () % 12))
+FROM questions q
+ORDER BY q.created_at
+LIMIT 30;
+
+-- ============================================================
+-- INDIVIDUAL ANSWER RATINGS (50 ratings)
+-- ============================================================
+INSERT INTO individual_answer_ratings (answer_id, rater_id, score, created_at)
+SELECT a.id,
+  ('a0000000-0000-0000-0000-00000000000' || (2 + (row_number() OVER ()) % 7))::uuid,
+  1 + abs(hashtext(a.id::text || (row_number() OVER ())::text)) % 5,
+  a.created_at + interval '1 day' + (interval '6 hours' * (row_number() OVER () % 8))
+FROM answers a
+ORDER BY a.created_at
+LIMIT 50;
+
+-- ============================================================
+-- DISCUSSIONS ON ANSWERS (20 per-answer threads)
+-- ============================================================
+INSERT INTO discussions (question_id, answer_id, author_id, body, depth, created_at)
+SELECT a.question_id,
+  a.id,
+  ('a0000000-0000-0000-0000-00000000000' || (1 + (row_number() OVER () + 3) % 8))::uuid,
+  (ARRAY[
+    'This worked for us too. One addition: make sure to handle the timeout case explicitly.',
+    'Could you clarify what you mean by "simple wrapper"? Do you mean a newtype or a trait object?',
+    'We tried this but hit issues with lifetimes across await points. Any tips?',
+    'Solid answer. I would add that you should also consider the testing story — mocking this is non-trivial.',
+    'Disagree slightly. In our case the simple approach caused a production outage due to race conditions.',
+    'Thanks for the concrete numbers. That matches what we saw in our load tests.',
+    '+1 on using the type system. We encode state machines in types and it catches so many bugs at compile time.',
+    'The blog post link would be super helpful if you can share it.',
+    'How does this interact with connection pooling? We use deadpool-postgres.',
+    'Great answer but I think you are missing the distributed case where network partitions are possible.'
+  ])[1 + (row_number() OVER ()) % 10],
+  0,
+  a.created_at + interval '6 hours' + (interval '3 hours' * (row_number() OVER () % 8))
+FROM answers a
+ORDER BY random()
+LIMIT 20;
