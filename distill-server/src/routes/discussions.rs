@@ -104,8 +104,16 @@ pub async fn list_discussions(
     State(state): State<AppState>,
     Path(question_id): Path<Uuid>,
     Query(params): Query<DiscussionParams>,
+    headers: axum::http::HeaderMap,
 ) -> Result<Json<Vec<DiscussionResponse>>, StatusCode> {
-    let user_id = Uuid::nil();
+    // Extract user_id from token if present (optional auth)
+    let user_id = headers
+        .get("authorization")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|h| h.strip_prefix("Bearer "))
+        .and_then(|token| crate::auth::jwt::validate_token(token, &state.jwt_secret).ok())
+        .map(|claims| claims.sub)
+        .unwrap_or(Uuid::nil());
 
     let rows = sqlx::query_as::<_, (Uuid, Uuid, Option<Uuid>, Uuid, String, i32, bool, chrono::DateTime<chrono::Utc>, i64, Option<i16>)>(
         r#"SELECT d.id, d.question_id, d.parent_id, d.author_id, d.body, d.depth, d.is_deleted, d.created_at,
