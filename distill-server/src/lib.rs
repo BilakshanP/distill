@@ -310,12 +310,37 @@ pub fn build_router(state: AppState) -> Router {
             axum::routing::post(routes::comments::create_answer_comment)
                 .get(routes::comments::get_answer_comments),
         )
-        .layer(TraceLayer::new_for_http())
-        .with_state(state);
+        .layer(TraceLayer::new_for_http());
+
+    let app = if std::env::var("DEBUG_REQUESTS").unwrap_or_default() == "true" {
+        app.layer(axum::middleware::from_fn(debug_log_middleware))
+    } else {
+        app
+    };
+
+    let app = app.with_state(state);
 
     #[cfg(debug_assertions)]
     let app =
         app.merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()));
 
     app
+}
+
+async fn debug_log_middleware(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let method = req.method().clone();
+    let uri = req.uri().clone();
+    let start = std::time::Instant::now();
+    let resp = next.run(req).await;
+    tracing::info!(
+        "{} {} → {} ({:?})",
+        method,
+        uri,
+        resp.status(),
+        start.elapsed()
+    );
+    resp
 }
