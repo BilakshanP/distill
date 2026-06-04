@@ -23,6 +23,24 @@ pub struct EditWikiAnswerRequest {
     pub edit_message: Option<String>,
 }
 
+#[derive(Serialize, ToSchema)]
+pub struct RevisionSummary {
+    pub id: Uuid,
+    pub editor_id: Uuid,
+    pub edit_message: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct RevisionDetail {
+    pub id: Uuid,
+    pub editor_id: Uuid,
+    pub body: String,
+    pub diff: String,
+    pub edit_message: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
 pub async fn get_wiki_answer(
     State(state): State<AppState>,
     Path(question_id): Path<Uuid>,
@@ -56,6 +74,16 @@ pub async fn edit_wiki_answer(
     auth: AuthUser,
     Json(req): Json<EditWikiAnswerRequest>,
 ) -> Result<Json<WikiAnswerResponse>, StatusCode> {
+    // Fetch old body before upsert
+    let old_body =
+        sqlx::query_scalar::<_, String>("SELECT body FROM wiki_answers WHERE question_id = $1")
+            .bind(question_id)
+            .fetch_optional(&state.db)
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_default();
+
     // Upsert wiki answer
     let row = sqlx::query_as::<_, (Uuid, Uuid, String, Option<Uuid>, Option<Uuid>, bool, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(
         r#"INSERT INTO wiki_answers (question_id, body, author_id, last_editor_id)
@@ -73,31 +101,13 @@ pub async fn edit_wiki_answer(
     .await
     .map_err(|e| { tracing::error!("wiki answer upsert: {:?}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
 
-    // Record edit
-    let old_body =
-        sqlx::query_scalar::<_, String>("SELECT body FROM wiki_answers WHERE question_id = $1")
-            .bind(question_id)
-            .fetch_optional(&state.db)
-            .await
-            .ok()
-            .flatten();
+    // Compute diff and store revision with full body
+    let diff = diffy_imara::create_patch(&old_body, &req.body).to_string();
 
-    let diff = if let Some(old) = &old_body {
-        format!(
-            "-{}\n+{}",
-            old.lines().take(5).collect::<Vec<_>>().join("\n-"),
-            req.body.lines().take(5).collect::<Vec<_>>().join("\n+")
-        )
-    } else {
-        format!(
-            "+{}",
-            req.body.lines().take(5).collect::<Vec<_>>().join("\n+")
-        )
-    };
-
-    sqlx::query("INSERT INTO wiki_answer_edits (wiki_answer_id, editor_id, diff, edit_message) VALUES ($1, $2, $3, $4)")
+    sqlx::query("INSERT INTO wiki_answer_edits (wiki_answer_id, editor_id, body, diff, edit_message) VALUES ($1, $2, $3, $4, $5)")
         .bind(row.0)
         .bind(auth.user_id)
+        .bind(&req.body)
         .bind(&diff)
         .bind(&req.edit_message)
         .execute(&state.db)
@@ -116,30 +126,13 @@ pub async fn edit_wiki_answer(
     }))
 }
 
-#[derive(Serialize, ToSchema)]
-pub struct WikiEditResponse {
-    pub id: Uuid,
-    pub editor_id: Uuid,
-    pub diff: String,
-    pub edit_message: Option<String>,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-}
-
+/// List revision summaries (for the history page sidebar)
 pub async fn get_wiki_answer_history(
     State(state): State<AppState>,
     Path(question_id): Path<Uuid>,
-) -> Result<Json<Vec<WikiEditResponse>>, StatusCode> {
-    let rows = sqlx::query_as::<
-        _,
-        (
-            Uuid,
-            Uuid,
-            String,
-            Option<String>,
-            chrono::DateTime<chrono::Utc>,
-        ),
-    >(
-        r#"SELECT e.id, e.editor_id, e.diff, e.edit_message, e.created_at
+) -> Result<Json<Vec<RevisionSummary>>, StatusCode> {
+    let rows = sqlx::query_as::<_, (Uuid, Uuid, Option<String>, chrono::DateTime<chrono::Utc>)>(
+        r#"SELECT e.id, e.editor_id, e.edit_message, e.created_at
            FROM wiki_answer_edits e
            JOIN wiki_answers w ON w.id = e.wiki_answer_id
            WHERE w.question_id = $1
@@ -152,13 +145,38 @@ pub async fn get_wiki_answer_history(
 
     Ok(Json(
         rows.into_iter()
-            .map(|r| WikiEditResponse {
+            .map(|r| RevisionSummary {
                 id: r.0,
                 editor_id: r.1,
-                diff: r.2,
-                edit_message: r.3,
-                created_at: r.4,
+                edit_message: r.2,
+                created_at: r.3,
             })
             .collect(),
     ))
+}
+
+/// Get a single revision with its diff
+pub async fn get_revision(
+    State(state): State<AppState>,
+    Path(revision_id): Path<Uuid>,
+) -> Result<Json<RevisionDetail>, StatusCode> {
+    let row = sqlx::query_as::<_, (Uuid, Uuid, String, String, Option<String>, chrono::DateTime<chrono::Utc>)>(
+        "SELECT id, editor_id, body, diff, edit_message, created_at FROM wiki_answer_edits WHERE id = $1"
+    )
+    .bind(revision_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    match row {
+        Some(r) => Ok(Json(RevisionDetail {
+            id: r.0,
+            editor_id: r.1,
+            body: r.2,
+            diff: r.3,
+            edit_message: r.4,
+            created_at: r.5,
+        })),
+        None => Err(StatusCode::NOT_FOUND),
+    }
 }

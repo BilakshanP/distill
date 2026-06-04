@@ -323,6 +323,7 @@ pub fn build_router(state: AppState) -> Router {
             "/questions/{id}/wiki-answer/history",
             get(routes::wiki_answers::get_wiki_answer_history),
         )
+        .route("/revisions/{id}", get(routes::wiki_answers::get_revision))
         // Discussions
         .route(
             "/questions/{id}/discussions",

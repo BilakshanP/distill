@@ -138,7 +138,9 @@ export const api = {
 	editWikiAnswer: (questionId: string, body: string, editMessage?: string) =>
 		request<Answer>('PUT', `/questions/${questionId}/wiki-answer`, { body, edit_message: editMessage }),
 	getWikiHistory: (questionId: string) =>
-		request<{ id: string; editor_id: string; diff: string; edit_message: string | null; created_at: string }[]>('GET', `/questions/${questionId}/wiki-answer/history`),
+		request<{ id: string; editor_id: string; edit_message: string | null; created_at: string }[]>('GET', `/questions/${questionId}/wiki-answer/history`),
+	getRevision: (revisionId: string) =>
+		request<{ id: string; editor_id: string; body: string; diff: string; edit_message: string | null; created_at: string }>('GET', `/revisions/${revisionId}`),
 
 	// Discussions
 	listDiscussions: (questionId: string, parentId?: string) => {
