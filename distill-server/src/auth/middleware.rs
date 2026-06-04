@@ -32,6 +32,16 @@ where
         let claims = jwt::validate_token(token, &app_state.jwt_secret)
             .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
+        // Verify user still exists
+        let exists: Option<(bool,)> = sqlx::query_as("SELECT true FROM users WHERE id = $1")
+            .bind(claims.sub)
+            .fetch_optional(&app_state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        if exists.is_none() {
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+
         // Set tenant context for RLS if present in JWT
         if let Some(tid) = claims.tenant_id {
             crate::routes::set_tenant(&app_state.db, tid).await;
