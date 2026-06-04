@@ -11,10 +11,20 @@ export function setToken(token: string) {
 
 export function clearToken() {
 	localStorage.removeItem('distill_token');
+	localStorage.removeItem('distill_user_id');
 }
 
 export function isLoggedIn(): boolean {
 	return !!getToken();
+}
+
+export function getUserId(): string | null {
+	if (typeof window === 'undefined') return null;
+	return localStorage.getItem('distill_user_id');
+}
+
+export function setUserId(id: string) {
+	localStorage.setItem('distill_user_id', id);
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -112,7 +122,11 @@ export const api = {
 	createAnswer: (questionId: string, body: string) =>
 		request<Answer>('POST', `/questions/${questionId}/answers`, { body }),
 	rateAnswer: (answerId: string, score: number) =>
-		request<void>('POST', `/answers/${answerId}/ratings`, { score }),
+		request<{ id: string; answer_id: string; rater_id: string; score: number }>('POST', `/answers/${answerId}/ratings`, { score }),
+	deleteRating: (answerId: string) =>
+		request<void>('PUT', `/answers/${answerId}/ratings/redact`),
+	getRatings: (answerId: string) =>
+		request<Paginated<{ id: string; rater_id: string; score: number }>>('GET', `/answers/${answerId}/ratings`),
 
 	// Comments
 	getQuestionComments: (questionId: string) =>

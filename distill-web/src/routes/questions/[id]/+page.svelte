@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
-	import { api, type Question, type Answer, isLoggedIn } from '$lib/api';
+	import { api, type Question, type Answer, isLoggedIn, getUserId, setUserId } from '$lib/api';
 	import { onMount } from 'svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
@@ -14,6 +14,7 @@
 	let newAnswer = $state('');
 	let submitting = $state(false);
 	let error = $state('');
+	let myRatings = $state<Record<string, number>>({});
 
 	const id = $derived($page.params.id!);
 
@@ -23,6 +24,26 @@
 			const [q, a] = await Promise.all([api.getQuestion(id), api.getAnswers(id)]);
 			question = q;
 			answers = a;
+
+			// Fetch user info and existing ratings
+			if (isLoggedIn()) {
+				try {
+					const me = await api.getMe();
+					setUserId(me.id);
+				} catch {}
+
+				const userId = getUserId();
+				if (userId) {
+					for (const ans of a) {
+						try {
+							const r = await api.getRatings(ans.id);
+							const mine = r.data.find(x => x.rater_id === userId);
+							if (mine) myRatings[ans.id] = mine.score;
+						} catch {}
+					}
+					myRatings = { ...myRatings };
+				}
+			}
 		} catch (e: any) {
 			error = e.message;
 		}
@@ -44,7 +65,17 @@
 
 	async function rate(answerId: string, score: number) {
 		try {
-			await api.rateAnswer(answerId, score);
+			if (myRatings[answerId] === score) {
+				// Same score = unrate
+				await api.deleteRating(answerId);
+				delete myRatings[answerId];
+				myRatings = { ...myRatings };
+			} else {
+				// New or different score = upsert
+				await api.rateAnswer(answerId, score);
+				myRatings[answerId] = score;
+				myRatings = { ...myRatings };
+			}
 		} catch (e: any) {
 			error = e.message;
 		}
@@ -97,12 +128,20 @@
 				</Card.Content>
 				{#if isLoggedIn()}
 					<Card.Footer>
-						<div class="flex gap-1">
+						<div class="flex gap-1 items-center">
+							<span class="text-xs text-muted-foreground mr-1">Rate:</span>
 							{#each [1, 2, 3, 4, 5] as score}
-								<Button variant="outline" size="sm" onclick={() => rate(a.id, score)}>
+								<Button
+									variant={myRatings[a.id] === score ? 'default' : 'outline'}
+									size="sm"
+									onclick={() => rate(a.id, score)}
+								>
 									{score}
 								</Button>
 							{/each}
+							{#if myRatings[a.id]}
+								<span class="text-xs text-muted-foreground ml-2">Your rating: {myRatings[a.id]}/5</span>
+							{/if}
 						</div>
 					</Card.Footer>
 				{/if}
