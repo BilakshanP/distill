@@ -23,6 +23,9 @@
 	let showAnswerThreads = $state<Record<string, boolean>>({});
 	let answerReplyBody = $state<Record<string, string>>({});
 	let myAnswerRatings = $state<Record<string, number>>({});
+	let collapsedAnswers = $state(false);
+	let collapsedDiscussion = $state(false);
+	let collapsedThreads = $state<Record<string, boolean>>({});
 	let error = $state('');
 
 	const id = $derived($page.params.id!);
@@ -245,7 +248,12 @@
 
 	<!-- Individual Answers -->
 	<section class="space-y-4">
-		<h2 class="text-lg font-semibold">{answers.length} {answers.length === 1 ? 'Answer' : 'Answers'}</h2>
+		<button class="text-lg font-semibold flex items-center gap-2" onclick={() => collapsedAnswers = !collapsedAnswers}>
+			<span class="text-xs">{collapsedAnswers ? '▶' : '▼'}</span>
+			{answers.length} {answers.length === 1 ? 'Answer' : 'Answers'}
+		</button>
+
+		{#if !collapsedAnswers}
 
 		{#each answers as a}
 			<Card.Root class={a.is_accepted ? 'border-green-500/50' : ''}>
@@ -314,13 +322,19 @@
 				</Button>
 			</div>
 		{/if}
+		{/if}
 	</section>
 
 	<Separator class="my-8" />
 
 	<!-- Threaded Discussion -->
 	<section class="space-y-4">
-		<h2 class="text-lg font-semibold">Discussion ({discussions.length})</h2>
+		<button class="text-lg font-semibold flex items-center gap-2" onclick={() => collapsedDiscussion = !collapsedDiscussion}>
+			<span class="text-xs">{collapsedDiscussion ? '▶' : '▼'}</span>
+			Discussion ({discussions.length})
+		</button>
+
+		{#if !collapsedDiscussion}
 
 		{#snippet threadNode(node: any)}
 			{@const isOwn = node.author_id === getUserId()}
@@ -360,9 +374,17 @@
 						</div>
 					</div>
 				{/if}
-				{#each node.children as child}
-					{@render threadNode(child)}
-				{/each}
+				{#if node.children.length > 0}
+					<button
+						class="text-[10px] text-muted-foreground hover:text-foreground"
+						onclick={() => { collapsedThreads[node.id] = !collapsedThreads[node.id]; collapsedThreads = {...collapsedThreads}; }}
+					>{collapsedThreads[node.id] ? `[+${node.children.length} hidden]` : '[-]'}</button>
+				{/if}
+				{#if !collapsedThreads[node.id]}
+					{#each node.children as child}
+						{@render threadNode(child)}
+					{/each}
+				{/if}
 			</div>
 		{/snippet}
 
@@ -375,6 +397,7 @@
 				<Textarea bind:value={newComment} rows={3} placeholder="Add to the discussion..." />
 				<Button onclick={submitComment} disabled={!newComment.trim()}>Post</Button>
 			</div>
+		{/if}
 		{/if}
 	</section>
 {:else if !error}
