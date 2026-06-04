@@ -314,6 +314,22 @@ pub fn build_router(state: AppState) -> Router {
             axum::routing::post(routes::comments::create_answer_comment)
                 .get(routes::comments::get_answer_comments),
         )
+        // Wiki answers
+        .route(
+            "/questions/{id}/wiki-answer",
+            get(routes::wiki_answers::get_wiki_answer).put(routes::wiki_answers::edit_wiki_answer),
+        )
+        // Discussions
+        .route(
+            "/questions/{id}/discussions",
+            axum::routing::post(routes::discussions::create_discussion)
+                .get(routes::discussions::list_discussions),
+        )
+        // Discussion votes
+        .route(
+            "/discussions/{id}/vote",
+            axum::routing::post(routes::discussion_votes::vote_discussion),
+        )
         .layer(TraceLayer::new_for_http());
 
     let app = if std::env::var("DEBUG_REQUESTS").unwrap_or_default() == "true" {

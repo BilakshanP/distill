@@ -2,6 +2,8 @@ pub mod admin;
 pub mod answers;
 pub mod comments;
 pub mod contradictions;
+pub mod discussion_votes;
+pub mod discussions;
 pub mod graph;
 pub mod links;
 pub mod llm_cache;
@@ -9,6 +11,7 @@ pub mod questions;
 pub mod ratings;
 pub mod tags;
 pub mod tenants;
+pub mod wiki_answers;
 
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
