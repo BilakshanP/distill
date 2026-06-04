@@ -88,6 +88,8 @@
 			if (myAnswerRatings[answerId] === score) {
 				await api.deleteAnswerRating(answerId);
 				delete myAnswerRatings[answerId];
+				// Refresh answer list to get updated stats
+				answers = await api.listAnswers(id);
 			} else {
 				const result = await api.rateAnswer(answerId, score);
 				myAnswerRatings[answerId] = score;
