@@ -26,6 +26,9 @@
 					<a href="/search" class="text-muted-foreground hover:text-foreground transition-colors">Search</a>
 					<a href="/ask" class="text-muted-foreground hover:text-foreground transition-colors">Ask</a>
 					<a href="/tags" class="text-muted-foreground hover:text-foreground transition-colors">Tags</a>
+					{#if loggedIn}
+						<a href="/admin" class="text-muted-foreground hover:text-foreground transition-colors">Admin</a>
+					{/if}
 				</nav>
 			</div>
 			<div>

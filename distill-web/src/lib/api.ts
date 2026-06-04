@@ -188,6 +188,16 @@ export const api = {
 	// Tags
 	listTags: () => request<{ tag: string; count: number }[]>('GET', '/tags'),
 
+	// Admin
+	getConfig: () => request<{ config: Record<string, string> }>('GET', '/admin/config'),
+	updateConfig: (config: Record<string, string>) =>
+		request<{ config: Record<string, string> }>('PUT', '/admin/config', config),
+	listJobs: () => request<{ id: string; status: string; job_type: string; created_at: string }[]>('GET', '/admin/jobs'),
+	reEmbed: () => request<{ enqueued: number }>('POST', '/admin/re-embed'),
+	promoteUser: (userId: string) => request<void>('PUT', `/admin/users/${userId}/promote`),
+	setUserQuota: (userId: string, quota: number) =>
+		request<void>('PUT', '/admin/user-quota', { user_id: userId, monthly_quota: quota }),
+
 	// Individual answers
 	listAnswers: (questionId: string) =>
 		request<IndividualAnswer[]>('GET', `/questions/${questionId}/answers`),
